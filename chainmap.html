@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>产业链图谱演示</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; min-height: 100%;
+    font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    color: #1a1a2e;
+    background: #f5f3ff;
+  }
+
+  /* ===== 顶部导航栏 ===== */
+  #header {
+    height: 56px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(245,243,255,0.9));
+    border-bottom: 1px solid rgba(139,92,246,0.15);
+    display: flex;
+    align-items: center;
+    padding: 0 32px;
+    gap: 20px;
+    backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  #header .brand {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    background: linear-gradient(90deg, #8b5cf6, #c084fc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  #header .breadcrumb { font-size: 13px; color: #888; }
+  #header .breadcrumb a { color: #949494; text-decoration: none; }
+  #header .breadcrumb a:hover { text-decoration: underline; }
+
+  main { max-width: 1920px; margin: 0 auto; padding: 24px 32px 64px; }
+
+  #fileInput { display: none; }
+
+  /* ===== 页眉右侧下载图片按钮（与 penetration 的 btn-primary 完全一致） ===== */
+  #header .header-right { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+  .btn-primary {
+    background: linear-gradient(135deg, #8b5cf6, #c084fc);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-weight: 500;
+    font-size: 13px;
+    padding: 8px 20px;
+    cursor: pointer;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: linear-gradient(135deg, #8b5cf6, #c084fc);
+    box-shadow: 0 4px 16px rgba(139,92,246,0.35);
+    transform: translateY(-1px);
+  }
+  .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  /* ===== 空态（与 penetration 的 centerUploadBtn 一致） ===== */
+  #emptyState {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: #999;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  #emptyState.hidden { display: none; }
+  #centerUpload {
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .center-upload-btn {
+    width: 400px; height: 200px;
+    border-radius: 12px;
+    background: rgba(139, 92, 246, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    border: 2px dashed rgba(139, 92, 246, 0.2);
+    color: rgba(139, 92, 246, 0.8);
+    flex-direction: column;
+    gap: 12px;
+    font-size: 16px;
+    font-weight: 500;
+  }
+  .center-upload-btn:hover {
+    background: rgba(139, 92, 246, 0.18);
+    border-color: rgba(139, 92, 246, 0.4);
+    color: rgba(107, 70, 193, 1);
+  }
+  .center-upload-btn .upload-icon { font-size: 48px; line-height: 1; }
+  .center-description { font-size: 14px; color: #666; line-height: 1.6; }
+  .template-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: rgba(139,92,246,0.08);
+    border: 1px solid rgba(139,92,246,0.25);
+    border-radius: 20px;
+    color: #8b5cf6;
+    font-size: 12px;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .template-link:hover { background: rgba(139,92,246,0.18); }
+
+  /* ===== 图片配置卡片（header-right 里，upload 后显示） ===== */
+  .cfg-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+    background: rgba(255,255,255,0.9);
+    border: 1px solid rgba(139,92,246,0.25);
+    border-radius: 20px;
+    font-size: 12px;
+    color: #555;
+  }
+  .cfg-card .cfg-label { font-weight: 500; color: #8b5cf6; }
+  .cfg-card label {
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 12px;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .cfg-card input[type="radio"] { display: none; }
+  .cfg-card label:hover { color: #8b5cf6; }
+  .cfg-card input[type="radio"]:checked + span {
+    background: linear-gradient(135deg, #8b5cf6, #c084fc);
+    color: #fff;
+    padding: 3px 8px;
+    border-radius: 12px;
+  }
+
+  /* ===== 演示卡片容器（精确复刻 Ardot Frame，~0.5 缩放适配屏幕） ===== */
+  .demo-root {
+    background: #F5F6FA;      /* Ardot Frame 底色 */
+    padding: 40px;             /* Ardot 80 * 0.5 */
+    width: fit-content;
+    max-width: 100%;
+    box-sizing: border-box;
+    border: 1px solid rgba(224, 231, 244, 0.9);   /* 细边框 */
+    border-radius: 12px;                           /* 圆角 */
+    box-shadow: 0 8px 32px rgba(14, 42, 71, 0.12), 0 2px 8px rgba(14, 42, 71, 0.06);  /* 阴影 */
+  }
+
+  /* 页头 */
+  .dr-head {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .dr-head .dr-title {
+    font-size: 44px;          /* Ardot 88 * 0.5 */
+    font-weight: 700;
+    color: #0E2A47;
+    line-height: 1.15;
+    letter-spacing: 0.3px;
+  }
+  .dr-head .dr-subtitle {
+    font-size: 16px;          /* Ardot 32 * 0.5 */
+    font-weight: 400;
+    color: #5A6BA0;
+    line-height: 1.5;
+  }
+  .dr-head .dr-legend {
+    font-size: 14px;          /* Ardot 28 * 0.5 */
+    font-weight: 400;
+    color: #5A6BA0;
+    line-height: 1.5;
+  }
+
+  /* 三栏 — 固定列宽匹配 Ardot 554 * 0.5 ≈ 277 */
+  .dr-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 278px);
+    gap: 24px;                /* Ardot gap 48 * 0.5 */
+    align-items: start;
+  }
+
+  /* ===== 板块 ===== */
+  .dr-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;                /* Ardot 二级网格 gap 24 * 0.5 */
+  }
+
+  /* 板块头（整块填色圆角） */
+  .dr-panel-head {
+    padding: 12px;            /* Ardot padding 24 * 0.5 */
+    border-radius: 8px;       /* Ardot 16 * 0.5 */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dr-panel-head h2 {
+    font-size: 20px;          /* Ardot 40 * 0.5 */
+    font-weight: 700;
+    color: #FFFFFF;
+    flex: 1;
+    min-width: 0;
+    line-height: 1.2;
+  }
+  .dr-panel-head .dr-panel-qty {
+    font-size: 14px;          /* Ardot 28 * 0.5 */
+    font-weight: 400;
+    color: #FFFFFF;
+    flex-shrink: 0;
+  }
+  .dr-panel[data-accent="blue"]  .dr-panel-head { background: #1F6FF0; }   /* 核心零部件 */
+  .dr-panel[data-accent="dark"]  .dr-panel-head { background: #0E2A47; }   /* 整机集成 */
+  .dr-panel[data-accent="teal"]  .dr-panel-head { background: #0FA3A3; }   /* 场景应用 */
+
+  /* ===== 二级卡片 ===== */
+  .dr-section {
+    background: #FFFFFF;
+    border: 1px solid #DDE5F0;
+    border-radius: 8px;      /* Ardot 16 * 0.5 */
+    padding: 12px;            /* Ardot padding 24 * 0.5 */
+    display: flex;
+    flex-direction: column;
+    gap: 10px;                /* Ardot gap 20 * 0.5 */
+  }
+  .dr-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .dr-section-head .dr-sec-name {
+    font-size: 16px;          /* Ardot 32 * 0.5 */
+    font-weight: 600;         /* SemiBold */
+    color: #0E2A47;
+    line-height: 1.2;
+  }
+
+  /* 三级模块组 */
+  .dr-tier3-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;                 /* 三级模块之间间距加大 */
+  }
+  .dr-tier3-block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;                  /* 标题与四级条目间的间距 */
+  }
+  .dr-tier3-title {
+    font-size: 14px;          /* Ardot 28 * 0.5 */
+    font-weight: 600;         /* SemiBold */
+    line-height: 1.35;
+  }
+  /* 三级标题颜色 = 板块 accent 色 */
+  .dr-panel[data-accent="blue"]  .dr-tier3-title { color: #1F6FF0; }
+  .dr-panel[data-accent="dark"]  .dr-tier3-title { color: #0E2A47; }
+  .dr-panel[data-accent="teal"]  .dr-tier3-title { color: #0FA3A3; }
+
+  .dr-tier4-list {
+    display: flex;
+    flex-direction: column;
+  }
+  .dr-tier4 {
+    font-size: 14px;          /* Ardot 28 * 0.5 */
+    font-weight: 400;
+    color: #31425A;           /* Ardot #31425A */
+    line-height: 1.9;         /* 四级条目行间距加大 */
+    padding-left: 4px;
+  }
+
+  /* ===== 企业量样式 =====
+     一级：板块头内白字 + “家”（唯一带“家”）
+     二级：彩色文字 + 底色 胶囊徽章，无“家”
+     三级/四级：用（）包裹，无“家” */
+  .dr-qty-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .dr-panel[data-accent="blue"]  .dr-section-head .dr-qty-badge { background: #EAF1FE; color: #1F6FF0; }
+  .dr-panel[data-accent="dark"]  .dr-section-head .dr-qty-badge { background: #E4EBF2; color: #0E2A47; }
+  .dr-panel[data-accent="teal"]  .dr-section-head .dr-qty-badge { background: #E0F2F2; color: #0FA3A3; }
+
+  .dr-qty-paren {
+    color: inherit;          /* 跟随节点名称颜色：三级=accent色，四级=#31425A */
+    font-weight: inherit;
+    font-size: 12px;
+    margin-left: 4px;
+    white-space: nowrap;
+  }
+
+  /* ===== 页脚 ===== */
+  .dr-foot {
+    margin-top: 28px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;          /* Ardot 28 * 0.5 */
+    font-weight: 400;
+    color: #5A6BA0;
+    line-height: 1.4;
+  }
+
+  /* ===== 演示图片舞台：居中展示 + 滚轮缩放 + 右上角删除 ===== */
+  #demoContainer {
+    position: relative;
+  }
+  #demoStage {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 28px 24px 40px;
+    overflow: auto;          /* 放大后溢出可滚动 */
+  }
+  #zoomWrap {
+    transform-origin: top center;
+    transition: transform 0.06s ease-out;
+  }
+  .demo-close {
+    position: absolute;
+    top: 12px; right: 16px;
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 1px solid rgba(14,42,71,0.25);
+    background: rgba(255,255,255,0.9);
+    color: #0E2A47;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(14,42,71,0.12);
+    transition: all 0.15s;
+  }
+  .demo-close:hover {
+    background: rgba(220,38,38,0.92);
+    border-color: transparent;
+    color: #fff;
+    transform: scale(1.05);
+  }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="brand">产业链图谱演示</div>
+  <div class="breadcrumb"><a href="index.html">← 回到工具台</a></div>
+  <div class="header-right">
+    <div class="cfg-card" id="cfgCard" style="display:none;">
+      <span class="cfg-label">企业量：</span>
+      <label><input type="radio" name="qtyMode" value="none"><span>不展示</span></label>
+      <label><input type="radio" name="qtyMode" value="l1" checked><span>仅一级</span></label>
+      <label><input type="radio" name="qtyMode" value="all"><span>全部节点</span></label>
+    </div>
+    <button class="btn-primary" id="downloadImgBtn" disabled title="请先上传 Excel 生成图谱">⬇ 下载图片</button>
+  </div>
+</div>
+
+<main style="position:relative;min-height:calc(100vh - 56px);">
+  <input type="file" id="fileInput" accept=".xlsx,.xls" />
+
+  <!-- 空态（居中、与 penetration 一致） -->
+  <div id="emptyState">
+    <div id="centerUpload">
+      <button class="center-upload-btn" id="centerUploadBtn" type="button">
+        <span class="upload-icon">📂</span>
+        <span class="upload-text">上传产业链图谱</span>
+      </button>
+      <div class="center-description">请上传 Excel 文件以生成产业链图谱演示卡片</div>
+      <a class="template-link" href="人形机器人.xlsx" download>
+        <span>📋</span><span>下载示例模板</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- 演示卡片 -->
+  <div id="demoContainer" style="display:none;"></div>
+</main>
+
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/html2canvas.min.js"></script>
+<script>
+(function() {
+  const $ = id => document.getElementById(id);
+  const fileInput = $('fileInput');
+  const emptyState = $('emptyState');
+  const demoContainer = $('demoContainer');
+  const downloadImgBtn = $('downloadImgBtn');
+
+  // ===== Ardot 三板块 accent 色，按一级板块出现顺序循环分配 =====
+  const ACCENTS = ['blue', 'dark', 'teal'];
+
+  // ===== 通用 Excel → 四级嵌套树 =====
+  // Excel 表头：一级/企业量/二级/企业量/三级/企业量/四级/企业量
+  // forward-fill 处理合并单元格；空行跳过
+  // 返回结构：
+  // { order: [l1Name, ...], panels: {
+  //   l1Name: { qty: number|null, order:[l2Name,...], sections: {
+  //     l2Name: { qty: number|null, order:[l3Name,...], tiers: {
+  //       l3Name: { qty: number|null, order:[l4Name,...], items: { l4Name: number|null } }
+  //     } }
+  //   } }
+  // }
+  function parseExcelToTree(wb) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+    let cur = { l1: null, l2: null, l3: null };
+    const tree = { order: [], panels: {} };
+
+    function ensureL1(n) {
+      if (!tree.panels[n]) {
+        tree.panels[n] = { qty: null, order: [], sections: {} };
+        tree.order.push(n);
+      }
+      return tree.panels[n];
+    }
+    function ensureL2(l1, n) {
+      const p = ensureL1(l1);
+      if (!p.sections[n]) {
+        p.sections[n] = { qty: null, order: [], tiers: {} };
+        p.order.push(n);
+      }
+      return p.sections[n];
+    }
+    function ensureL3(l1, l2, n) {
+      const s = ensureL2(l1, l2);
+      if (!s.tiers[n]) {
+        s.tiers[n] = { qty: null, order: [], items: {} };
+        s.order.push(n);
+      }
+      return s.tiers[n];
+    }
+
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      // 空行跳过
+      if (r[0] == null && r[2] == null && r[4] == null && r[6] == null) continue;
+
+      if (r[0] != null) cur.l1 = String(r[0]).trim();
+      if (r[2] != null) cur.l2 = String(r[2]).trim();
+      if (r[4] != null) cur.l3 = String(r[4]).trim();
+
+      if (!cur.l1) continue;
+
+      // 一级企业量
+      if (r[1] != null && typeof r[1] === 'number') {
+        ensureL1(cur.l1).qty = r[1];
+      }
+
+      // 二级企业量
+      if (cur.l2 && r[3] != null && typeof r[3] === 'number') {
+        ensureL2(cur.l1, cur.l2).qty = r[3];
+      }
+
+      // 三级企业量
+      if (cur.l3 && r[5] != null && typeof r[5] === 'number') {
+        ensureL3(cur.l1, cur.l2, cur.l3).qty = r[5];
+      }
+
+      // 四级条目 + 企业量（l4 可能是 null，跳过）
+      const l4 = r[6];
+      if (l4 != null) {
+        const l4Name = String(l4).trim();
+        const t3 = ensureL3(cur.l1, cur.l2, cur.l3);
+        if (!t3.items[l4Name]) {
+          t3.items[l4Name] = null;
+          t3.order.push(l4Name);
+        }
+        if (r[7] != null && typeof r[7] === 'number') {
+          t3.items[l4Name] = r[7];
+        }
+      }
+    }
+    return tree;
+  }
+
+  // ===== state 缓存（配置切换时重渲染用） =====
+  const state = { industryName: '', tree: null, qtyMode: 'l1' };
+  let zoomScale = 1;   // 演示图片缩放比例
+
+  // ===== 渲染（100% 遍历 Excel 动态树，Ardot 仅视觉 CSS） =====
+  // qtyMode: 'none' 不展示企业量 / 'l1' 仅一级 / 'all' 全部节点
+  function render(industryName, tree, qtyMode) {
+    state.industryName = industryName;
+    state.tree = tree;
+    state.qtyMode = qtyMode || 'l1';
+
+    emptyState.classList.add('hidden');
+    demoContainer.style.display = 'block';
+    downloadImgBtn.disabled = false;
+    document.getElementById('cfgCard').style.display = 'flex';
+
+    // 副标题：动态拼一级板块名（按出现顺序）
+    const subLeft = tree.order.join(' · ');
+
+    // 辅助：按 mode 判断某层是否显示 qty
+    function showQtyAtLevel(level) {
+      const m = state.qtyMode;
+      if (m === 'none') return false;
+      if (m === 'l1') return level === 1;
+      if (m === 'all') return true;
+      return false;
+    }
+    function qtyBadge(qty) {
+      if (qty == null) return '';
+      return '<span class="dr-qty-badge">' + fmtInt(qty) + '</span>';
+    }
+    function qtyParen(qty) {
+      if (qty == null) return '';
+      return '<span class="dr-qty-paren">（' + fmtInt(qty) + '）</span>';
+    }
+
+    let panelsHtml = '';
+    tree.order.forEach((l1Name, idx) => {
+      const p = tree.panels[l1Name];
+      const accent = ACCENTS[idx % ACCENTS.length];
+
+      let sectionsHtml = '';
+      p.order.forEach(l2Name => {
+        const sec = p.sections[l2Name];
+        let tiersHtml = '';
+        sec.order.forEach(l3Name => {
+          const tier = sec.tiers[l3Name];
+          let l4Html = '';
+          tier.order.forEach(l4Name => {
+            const qty = tier.items[l4Name];
+            const tag = (showQtyAtLevel(4) ? qtyParen(qty) : '');
+            l4Html += '<div class="dr-tier4">· ' + esc(l4Name) + tag + '</div>';
+          });
+          tiersHtml +=
+            '<div class="dr-tier3-block">' +
+              '<div class="dr-tier3-title">' + esc(l3Name) + (showQtyAtLevel(3) ? qtyParen(tier.qty) : '') + '</div>' +
+              (l4Html ? '<div class="dr-tier4-list">' + l4Html + '</div>' : '') +
+            '</div>';
+        });
+
+        sectionsHtml +=
+          '<div class="dr-section">' +
+            '<div class="dr-section-head"><span class="dr-sec-name">' + esc(l2Name) + '</span>' + (showQtyAtLevel(2) ? qtyBadge(sec.qty) : '') + '</div>' +
+            (tiersHtml ? '<div class="dr-tier3-group">' + tiersHtml + '</div>' : '') +
+          '</div>';
+      });
+
+      panelsHtml +=
+        '<div class="dr-panel" data-accent="' + accent + '">' +
+          '<div class="dr-panel-head">' +
+            '<h2>' + esc(l1Name) + '</h2>' +
+            '<span class="dr-panel-qty">' + (showQtyAtLevel(1) && p.qty != null ? fmtInt(p.qty) + ' 家' : '') + '</span>' +
+          '</div>' +
+          (sectionsHtml ? sectionsHtml : '<div style="color:#aaa;font-size:13px;padding:12px 0;">暂无二级分类数据</div>') +
+        '</div>';
+    });
+
+    zoomScale = 1;
+    demoContainer.innerHTML =
+      '<div id="demoStage">' +
+        '<button class="demo-close" id="demoCloseBtn" title="删除并重新上传" type="button">×</button>' +
+        '<div id="zoomWrap"><div class="demo-root" id="demoRoot">' +
+        '<div class="dr-head">' +
+          '<div class="dr-title">' + esc(industryName) + '产业链图谱</div>' +
+          '<div class="dr-subtitle">' + esc(subLeft) + ' —— 四级产业链全景与企业分布</div>' +
+          '<div class="dr-legend">图例：一级色带 = 一级节点 | 卡片 = 二级节点 | 彩色条目 = 三级节点 | · 条目 = 四级节点</div>' +
+        '</div>' +
+        '<div class="dr-grid">' + panelsHtml + '</div>' +
+        '<div class="dr-foot">' +
+          '<span>数据来源：安硕产业链-' + esc(industryName) + '</span>' +
+          '<span>Amarsoft 安硕信息 · 2026</span>' +
+        '</div>' +
+        '</div></div>' +   /* 关闭 demoRoot + zoomWrap */
+      '</div>';  /* 关闭 demoStage */
+  }
+
+  function reRender() {
+    if (!state.tree) return;
+    const sel = document.querySelector('input[name="qtyMode"]:checked');
+    state.qtyMode = sel ? sel.value : 'l1';
+    render(state.industryName, state.tree, state.qtyMode);
+  }
+
+  function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function fmtInt(n) { return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+  // 配置卡片 radio 切换 → 重渲染
+  document.querySelectorAll('input[name="qtyMode"]').forEach(r => {
+    r.addEventListener('change', reRender);
+  });
+
+  // 上传
+  document.getElementById('centerUploadBtn').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const name = f.name.replace(/\.(xlsx|xls)$/i, '');
+    const reader = new FileReader();
+    reader.onload = evt => {
+      try {
+        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: 'array' });
+        const tree = parseExcelToTree(wb);
+        render(name, tree);
+      } catch (err) { alert('解析失败：' + err.message); console.error(err); }
+    };
+    reader.readAsArrayBuffer(f);
+  });
+
+  // 下载图片
+  downloadImgBtn.addEventListener('click', async () => {
+    const root = document.getElementById('demoRoot');
+    if (!root) return;
+    downloadImgBtn.disabled = true;
+    downloadImgBtn.textContent = '生成中…';
+    try {
+      const canvas = await html2canvas(root, { backgroundColor: '#F5F6FA', scale: 2, useCORS: true });
+      const link = document.createElement('a');
+      link.download = '产业链图谱演示.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (err) { alert('生成图片失败：' + err.message); console.error(err); }
+    finally { downloadImgBtn.disabled = false; downloadImgBtn.textContent = '⬇ 下载图片'; }
+  });
+
+  // ===== Ctrl + 鼠标滚轮缩放演示图片 =====
+  demoContainer.addEventListener('wheel', e => {
+    if (!state.tree) return;
+    if (!e.ctrlKey && !e.metaKey) return;   // 仅 Ctrl(或 Cmd)+滚轮 触发缩放
+    e.preventDefault();
+    zoomScale = Math.min(3, Math.max(0.4, zoomScale + (e.deltaY < 0 ? 0.1 : -0.1)));
+    const zw = demoContainer.querySelector('#zoomWrap');
+    if (zw) zw.style.transform = 'scale(' + zoomScale + ')';
+  }, { passive: false });
+
+  // ===== 右上角 × 删除，恢复未上传状态 =====
+  demoContainer.addEventListener('click', e => {
+    if (e.target && e.target.id === 'demoCloseBtn') resetToEmpty();
+  });
+
+  function resetToEmpty() {
+    state.industryName = '';
+    state.tree = null;
+    state.qtyMode = 'l1';
+    zoomScale = 1;
+    demoContainer.innerHTML = '';
+    demoContainer.style.display = 'none';
+    document.querySelectorAll('input[name="qtyMode"]').forEach(r => { r.checked = (r.value === 'l1'); });
+    document.getElementById('cfgCard').style.display = 'none';
+    downloadImgBtn.disabled = true;
+    downloadImgBtn.textContent = '⬇ 下载图片';
+    emptyState.classList.remove('hidden');
+    fileInput.value = '';   // 清空文件输入，确保可重新选择同一文件
+  }
+})();
+</script>
+</body>
+</html>
