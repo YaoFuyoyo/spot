@@ -195,7 +195,7 @@ async function generateChain(region, industry) {
 
   let resp;
   try {
-    resp = await fetch(BASE + '/v1/chat/completions', {
+    resp = await fetch(BASE + '/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + requireKey() },
       body: JSON.stringify(payload),
