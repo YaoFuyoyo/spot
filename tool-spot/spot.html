@@ -1,0 +1,2881 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>产业穿透图谱 - 3D可视化平台</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
+  body { background: #f5f3ff; color: #333; }
+
+  #app { display: flex; flex-direction: column; height: 100vh; }
+
+  #toolbar {
+    height: 56px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(245,243,255,0.9));
+    border-bottom: 1px solid rgba(139,92,246,0.15);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 16px;
+    backdrop-filter: blur(10px);
+    z-index: 10;
+  }
+
+  #toolbar .brand {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a1a2e;
+    letter-spacing: 1px;
+    margin-right: 24px;
+    background: linear-gradient(90deg, #8b5cf6, #c084fc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  #toolbar .breadcrumb { font-size: 13px; color: #888; }
+  #toolbar .breadcrumb a { color: #949494; text-decoration: none; }
+  #toolbar .breadcrumb a:hover { text-decoration: underline; }
+
+  #fileInput { display: none; }
+
+  select, button {
+    padding: 7px 14px;
+    background: rgba(255,255,255,0.8);
+    border: 1px solid rgba(139,92,246,0.2);
+    border-radius: 6px;
+    color: #333;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  select:hover, button:hover { background: rgba(139,92,246,0.08); }
+  select:disabled, button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  #companyAutocomplete { position: relative; min-width: 260px; }
+  #companyInput {
+    width: 100%;
+    padding: 7px 14px;
+    background: rgba(255,255,255,0.8);
+    border: 1px solid rgba(139,92,246,0.2);
+    border-radius: 6px;
+    color: #333;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: text;
+    transition: all 0.2s;
+    box-sizing: border-box;
+  }
+  #companyInput:hover:not(:disabled) { background: rgba(139,92,246,0.08); }
+  #companyInput:focus {
+    outline: none;
+    border-color: #8b5cf6;
+    box-shadow: 0 0 0 3px rgba(139,92,246,0.1);
+  }
+  #companyInput:disabled { opacity: 0.4; cursor: not-allowed; }
+  #companyInput::placeholder { color: #999; }
+
+  #companyDropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid rgba(139,92,246,0.2);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    margin-top: 4px;
+    max-height: 240px;
+    overflow-y: auto;
+    z-index: 100;
+    display: none;
+  }
+  #companyDropdown.show { display: block; }
+  #companyDropdown .dropdown-item {
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #333;
+    transition: background 0.15s;
+  }
+  #companyDropdown .dropdown-item:hover,
+  #companyDropdown .dropdown-item.highlighted {
+    background: rgba(139,92,246,0.08);
+    color: #8b5cf6;
+  }
+  #companyDropdown .dropdown-empty {
+    padding: 12px 14px;
+    color: #999;
+    font-size: 13px;
+    text-align: center;
+  }
+
+  select, button {
+    padding: 7px 14px;
+    background: rgba(255,255,255,0.8);
+    border: 1px solid rgba(139,92,246,0.2);
+    border-radius: 6px;
+    color: #333;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  select:hover, button:hover { background: rgba(139,92,246,0.08); }
+  select:disabled, button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #8b5cf6, #c084fc);
+    border: none;
+    color: #fff;
+    font-weight: 500;
+    padding: 8px 20px;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: linear-gradient(135deg, #8b5cf6, #c084fc);
+    box-shadow: 0 4px 16px rgba(139,92,246,0.35);
+    transform: translateY(-1px);
+  }
+
+  #downloadBtn {
+    background: #fff;
+    border: 1px solid #8b5cf6;
+    color: #8b5cf6;
+    font-weight: 500;
+    padding: 8px 18px;
+  }
+  #downloadBtn:hover:not(:disabled) { background: rgba(139,92,246,0.08); }
+
+  #statusBar {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #666;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot.idle { background: #ccc; }
+  .dot.loading { background: #faad14; animation: pulse 1s infinite; }
+  .dot.success { background: #52c41a; }
+  .dot.error { background: #ff4d4f; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  #graphContainer {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #overlay {
+    position: absolute;
+    top: 56px; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+  #overlay > div { pointer-events: auto; }
+
+  #rightPanel {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 200px;
+  }
+
+  #legend, #controls {
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(139,92,246,0.2);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 12px;
+    box-shadow: 0 4px 20px rgba(139,92,246,0.1);
+    width: 100%;
+  }
+
+  #depthPanel {
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(139,92,246,0.2);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 12px;
+    box-shadow: 0 4px 20px rgba(139,92,246,0.1);
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #depthPanel h4 { font-size: 13px; color: #1a1a2e; margin-bottom: 0; font-weight: 600; }
+  .depth-radios { display: flex; flex-direction: row; gap: 8px; }
+  .depth-radios label {
+    flex: 1;
+    text-align: center;
+    padding: 6px 0;
+    border: 1px solid rgba(139,92,246,0.25);
+    border-radius: 6px;
+    cursor: pointer;
+    color: #555;
+    font-size: 12px;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .depth-radios input { display: none; }
+  .depth-radios label:has(input:checked) {
+    background: linear-gradient(135deg, #8b5cf6, #c084fc);
+    color: #fff;
+    border-color: transparent;
+    font-weight: 600;
+  }
+
+  #legend h4, #controls h4 { font-size: 13px; color: #1a1a2e; margin-bottom: 8px; font-weight: 600; }
+  .legend-item { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: #555; }
+  .legend-color { width: 14px; height: 4px; border-radius: 2px; }
+  .legend-node { width: 10px; height: 10px; border-radius: 50%; }
+
+  #controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  #controls .tip { color: #888; font-size: 11px; line-height: 1.5; }
+
+  /* ===== 左侧交叉分析配置卡片 ===== */
+  #leftPanel {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    bottom: 20px;
+    width: 224px;
+    display: flex;
+    flex-direction: column;
+    z-index: 5;
+  }
+  #crossPanel {
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(139,92,246,0.2);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 12px;
+    box-shadow: 0 4px 20px rgba(139,92,246,0.1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+  }
+  #crossPanel h4 { font-size: 13px; color: #1a1a2e; margin-bottom: 8px; font-weight: 600; }
+  .cross-tools { display: flex; gap: 6px; margin-bottom: 10px; }
+  .cross-btn {
+    flex: 1;
+    border: 1px solid rgba(139,92,246,0.4);
+    background: #fff;
+    color: #8b5cf6;
+    border-radius: 6px;
+    padding: 5px 0;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .cross-btn:hover { background: #8b5cf6; color: #fff; }
+  #crossList {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-height: 0;
+    margin-left: -4px;
+    padding-right: 4px;
+  }
+  #crossList::-webkit-scrollbar { width: 4px; }
+  #crossList::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.3); border-radius: 4px; }
+  .cross-card {
+    border: 1px solid rgba(139,92,246,0.18);
+    border-radius: 8px;
+    padding: 6px 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    background: #faf9ff;
+  }
+  .cross-card .cc-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; line-height: 1.2; }
+  .cross-card .cc-body { flex: 1; min-width: 0; }
+  .cross-card .cc-combo { font-size: 11px; color: #8b5cf6; font-weight: 600; }
+  .cross-card .cc-note { font-size: 11px; color: #555; line-height: 1.3; margin-top: 2px; word-break: break-all; }
+  .cross-card .cc-del {
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    color: #bbb;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 2px;
+  }
+  .cross-card .cc-del:hover { color: #ff4d4f; }
+
+  /* 新增/编辑表单 */
+  .cross-editor {
+    border: 1px solid rgba(139,92,246,0.3);
+    border-radius: 8px;
+    padding: 10px;
+    background: #f6f3ff;
+    margin-bottom: 10px;
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .cross-editor .ce-title { font-size: 12px; font-weight: 600; color: #8b5cf6; }
+  .cross-editor label { font-size: 11px; color: #888; }
+  .ce-pools { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ce-pool {
+    font-size: 11px;
+    border: 1px solid #ccc;
+    background: #fff;
+    color: #555;
+    border-radius: 10px;
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .ce-pool.selected { background: #8b5cf6; border-color: #8b5cf6; color: #fff; }
+  .ce-note {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 12px;
+    color: #333;
+    outline: none;
+  }
+  .ce-note:focus { border-color: #8b5cf6; }
+  .ce-icons { display: flex; flex-wrap: wrap; gap: 4px; max-height: 90px; overflow-y: auto; }
+  .ce-ico {
+    width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .ce-ico.selected { border-color: #8b5cf6; background: #8b5cf6; }
+  .ce-err { color: #ff4d4f; font-size: 11px; min-height: 14px; }
+  .ce-actions { display: flex; gap: 6px; }
+
+  .relation-group { margin-top: 10px; }
+  .relation-group-title {
+    font-size: 12px;
+    color: #8b5cf6;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(139,92,246,0.15);
+  }
+
+  .checkbox-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #333; }
+  .checkbox-row input { accent-color: #8b5cf6; }
+
+  #loadingOverlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(245,243,255,0.92);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    z-index: 100;
+  }
+  #loadingOverlay.active { display: flex; }
+  .spinner {
+    width: 48px; height: 48px;
+    border: 3px solid rgba(139,92,246,0.2);
+    border-top-color: #8b5cf6;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loadingText { font-size: 14px; color: #666; }
+
+  #tooltip {
+    position: absolute;
+    background: rgba(255,255,255,0.98);
+    border: 1px solid rgba(139,92,246,0.25);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 50;
+    display: none;
+    max-width: 280px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(139,92,246,0.15);
+  }
+  #tooltip .tt-title { font-weight: 600; color: #1a1a2e; margin-bottom: 6px; font-size: 13px; }
+  #tooltip .tt-rel { color: #555; line-height: 1.6; }
+  #tooltip .tt-rel span { color: #8b5cf6; }
+
+  #actionBar {
+    position: absolute;
+    top: 20px;
+    right: 230px;
+    display: flex;
+    gap: 8px;
+    z-index: 20;
+    pointer-events: auto;
+  }
+  #app.fullscreen #actionBar { right: 20px; }
+  .action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 7px 14px;
+    background: rgba(255,255,255,0.95);
+    border: 1px solid rgba(139,92,246,0.2);
+    color: #8b5cf6;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(139,92,246,0.1);
+    transition: all .15s;
+  }
+  .action-btn:hover {
+    background: linear-gradient(135deg, #8b5cf6, #c084fc);
+    color: #fff;
+    border-color: #8b5cf6;
+    transform: translateY(-1px);
+  }
+  #app.fullscreen #toolbar,
+  #app.fullscreen #crossPanel,
+  #app.fullscreen #controls,
+  #app.fullscreen #depthPanel,
+  #app.fullscreen #legend {
+    display: none !important;
+  }
+
+  #emptyState {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: #999;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  #emptyState.hidden { display: none; }
+
+  #centerUpload {
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  #centerSelect {
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  #centerSelect .select-icon { font-size: 40px; color: #c4b5fd; }
+  .center-upload-btn {
+    width: 400px; height: 200px;
+    border-radius: 12px;
+    background: rgba(139, 92, 246, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    border: 2px dashed rgba(139, 92, 246, 0.2);
+    color: rgba(139, 92, 246, 0.8);
+    flex-direction: column;
+    gap: 12px;
+    font-size: 16px;
+    font-weight: 500;
+  }
+  .center-upload-btn:hover {
+    background: rgba(139, 92, 246, 0.18);
+    border-color: rgba(139, 92, 246, 0.4);
+    color: rgba(107, 70, 193, 1);
+  }
+  .center-upload-btn .upload-icon {
+    font-size: 48px;
+    line-height: 1;
+  }
+  .center-upload-btn .upload-text {
+    margin-top: 0;
+  }
+
+  .center-description {
+    font-size: 14px;
+    color: #666;
+    line-height: 1.6;
+  }
+
+  .template-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: rgba(139,92,246,0.08);
+    border: 1px solid rgba(139,92,246,0.25);
+    border-radius: 20px;
+    color: #8b5cf6;
+    font-size: 12px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .template-link:hover {
+    background: rgba(139,92,246,0.15);
+    border-color: #8b5cf6;
+  }
+
+  #statusBar .status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background-color 0.2s, color 0.2s;
+    position: relative;
+    cursor: default;
+    background-color: transparent;
+  }
+  #statusBar .status-item.is-hover {
+    background-color: rgba(255,77,79,0.08) !important;
+  }
+  #statusBar .status-item .delete-btn {
+    display: none;
+    cursor: pointer;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: rgba(255,77,79,0.15);
+    border: 1px solid rgba(255,77,79,0.4);
+    color: #ff4d4f;
+    font-size: 10px;
+    line-height: 1;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+  #statusBar .status-item.is-hover .status-dot {
+    display: none;
+  }
+  #statusBar .status-item.is-hover .delete-btn {
+    display: inline-flex;
+  }
+  #statusBar .status-item.is-hover .status-text {
+    color: #ff4d4f;
+  }
+  #statusBar .status-item .delete-btn:hover {
+    background: rgba(255,77,79,0.3);
+    transform: scale(1.1);
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <div class="brand">SPOT 产业穿透</div>
+    <div class="breadcrumb"><a href="../index.html">← 回到工具台</a></div>
+    <div id="statusBar">
+      <div class="status-item" id="statusItem">
+        <span class="dot idle status-dot" id="statusDot"></span>
+        <span class="delete-btn" id="statusDeleteBtn" title="删除已上传文件">✕</span>
+        <span id="statusText" class="status-text">等待上传数据</span>
+      </div>
+    </div>
+    <div id="companyAutocomplete">
+      <input type="text" id="companyInput" disabled placeholder="-- 请选择企业 --" autocomplete="off" />
+      <div id="companyDropdown"></div>
+    </div>
+    <button class="btn-primary" id="generateBtn" disabled>✨ 生成图谱</button>
+    <button id="downloadBtn" disabled title="将穿透结果导出为Excel（5个Sheet）">下载Excel</button>
+  </div>
+
+  <div id="graphContainer"></div>
+
+  <div id="overlay">
+    <div id="leftPanel">
+      <div id="crossPanel">
+        <h4>交叉分析</h4>
+        <div class="cross-tools">
+          <button class="cross-btn" id="addCrossBtn">＋ 新增组合</button>
+          <button class="cross-btn" id="resetCrossBtn">↺ 重置</button>
+        </div>
+        <div class="cross-editor" id="crossEditor">
+          <div class="ce-title">新增交叉组合</div>
+          <label>选择企业池（2-5 个）</label>
+          <div class="ce-pools" id="cePools"></div>
+          <label>自定义备注</label>
+          <input class="ce-note" id="ceNote" placeholder="请输入备注" maxlength="40" />
+          <label>选择图标</label>
+          <div class="ce-icons" id="ceIcons"></div>
+          <div class="ce-err" id="ceErr"></div>
+          <div class="ce-actions">
+            <button class="cross-btn" id="ceSave">保存</button>
+            <button class="cross-btn" id="ceCancel">取消</button>
+          </div>
+        </div>
+        <div id="crossList"></div>
+      </div>
+    </div>
+    <div id="emptyState">
+      <div id="centerUpload">
+        <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none" />
+        <button class="center-upload-btn" id="centerUploadBtn" title="点击上传Excel数据文件">
+          <span class="upload-icon">📂</span>
+          <span class="upload-text">上传数据文件</span>
+        </button>
+        <div class="center-description">请上传数据文件并选择企业以生成3D产业穿透图谱</div>
+        <a class="template-link" id="templateLink" href="#" onclick="downloadTemplate(event)">
+          <span>📋</span>
+          <span>下载示例模板</span>
+        </a>
+      </div>
+      <div id="centerSelect" style="display:none;">
+        <div class="select-icon">🔎</div>
+        <div class="center-description">请选择要穿透的企业</div>
+      </div>
+    </div>
+
+    <div id="rightPanel">
+      <div id="controls">
+        <h4>显示控制</h4>
+        <div class="checkbox-row">
+          <input type="checkbox" id="toggleNodeLabels" checked />
+          <label for="toggleNodeLabels">显示节点标签</label>
+        </div>
+        <div class="tip" style="margin-top:8px;">
+          🖱️ 拖拽节点移动<br>
+          🔄 拖拽空白旋转视角<br>
+          🔍 滚轮缩放
+        </div>
+      </div>
+
+      <div id="depthPanel">
+        <h4>穿透层级</h4>
+        <div class="depth-radios">
+          <label><input type="radio" name="penetrationDepth" value="1" checked /> 1层</label>
+          <label><input type="radio" name="penetrationDepth" value="2" /> 2层</label>
+          <label><input type="radio" name="penetrationDepth" value="3" /> 3层</label>
+        </div>
+      </div>
+
+      <div id="legend">
+        <h4>关系图例</h4>
+        <div class="relation-group">
+          <div class="relation-group-title">同业关系</div>
+          <div class="legend-item"><div class="legend-color" style="background:#ff4d4f"></div>产品竞争 (池1)</div>
+          <div class="legend-item"><div class="legend-color" style="background:#ff7a45"></div>技术合作 (池4)</div>
+        </div>
+        <div class="relation-group">
+          <div class="relation-group-title">上游关系</div>
+          <div class="legend-item"><div class="legend-color" style="background:#1890ff"></div>潜在供应商 (池2)</div>
+          <div class="legend-item"><div class="legend-color" style="background:#40a9ff"></div>供应商 (池5)</div>
+        </div>
+        <div class="relation-group">
+          <div class="relation-group-title">下游关系</div>
+          <div class="legend-item"><div class="legend-color" style="background:#52c41a"></div>潜在客户 (池3)</div>
+          <div class="legend-item"><div class="legend-color" style="background:#73d13d"></div>客户 (池6)</div>
+        </div>
+        <div class="relation-group">
+          <div class="relation-group-title">投资关系</div>
+          <div class="legend-item"><div class="legend-color" style="background:#faad14"></div>股东 (池7)</div>
+          <div class="legend-item"><div class="legend-color" style="background:#ffd666"></div>被投资企业 (池8)</div>
+        </div>
+        <div style="margin-top:10px; padding-top:8px; border-top:1px solid rgba(139,92,246,0.15);">
+          <div class="legend-item"><div class="legend-node" style="background:#8b5cf6"></div>中心企业</div>
+          <div class="legend-item"><div class="legend-node" style="background:#a0a0a0"></div>关联企业</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tooltip"></div>
+
+    <div id="actionBar">
+      <button class="action-btn" id="restoreBtn" title="恢复默认节点位置">↺ 恢复</button>
+      <button class="action-btn" id="fullscreenBtn" title="全屏展示">⤢ 全屏</button>
+    </div>
+
+    <div id="loadingOverlay">
+      <div class="spinner"></div>
+      <div id="loadingText">正在解析数据并生成图谱...</div>
+    </div>
+  </div>
+</div>
+
+<script src="../common/vendor/three.min.js"></script>
+<script src="../common/vendor/3d-force-graph.min.js"></script>
+<script src="../common/vendor/xlsx.full.min.js"></script>
+
+<script>
+(function() {
+  const TABLE_NAMES = {
+    productMaterial: '产品原料关系表',
+    companyProduct: '企业主营产品表',
+    patentOwner: '专利权所属表',
+    supplyChain: '供销方关系表',
+    equityInvestment: '股权投资关系表'
+  };
+
+  const POOL_COLORS = {
+    pool1: '#ff4d4f',  // 同业-产品竞争
+    pool2: '#1890ff',  // 上游-潜在供应商
+    pool3: '#52c41a',  // 下游-潜在客户
+    pool4: '#ff7a45',  // 同业-技术合作
+    pool5: '#40a9ff',  // 上游-供应商
+    pool6: '#73d13d',  // 下游-客户
+    pool7: '#faad14',  // 投资-股东
+    pool8: '#ffd666'   // 投资-被投资企业
+  };
+
+  const POOL_LABELS = {
+    pool1: '产品竞争',
+    pool2: '潜在供应商',
+    pool3: '潜在客户',
+    pool4: '技术合作',
+    pool5: '供应商',
+    pool6: '客户',
+    pool7: '股东',
+    pool8: '被投资企业'
+  };
+
+  const POOL_RELATIONS = {
+    pool1: '同业', pool2: '上游', pool3: '下游',
+    pool4: '同业', pool5: '上游', pool6: '下游',
+    pool7: '投资', pool8: '投资'
+  };
+
+  /* ===== 交叉分析配置 ===== */
+  const CROSS_ICONS = ['❓','⭐','🚩','⚡','❗','👍','🩷','👌','❌','✨','💡','🕒','✅','⚙️'];
+  const DEFAULT_CROSS_RULES = [
+  { pools: ["pool1", "pool4"], note: "既竞争又合作", icon: "❓" },
+  { pools: ["pool2", "pool5"], note: "已确认供应商", icon: "⭐" },
+  { pools: ["pool3", "pool6"], note: "已确认客户", icon: "⭐" },
+  { pools: ["pool7", "pool8"], note: "交叉持股企业", icon: "🚩" },
+  { pools: ["pool1", "pool5"], note: "竞争对手是供应商", icon: "⚡" },
+  { pools: ["pool1", "pool6"], note: "竞争对手是客户", icon: "❗" },
+  { pools: ["pool1", "pool7"], note: "竞争对手是股东", icon: "⚡" },
+  { pools: ["pool1", "pool8"], note: "竞争对手是投资企业", icon: "❗" },
+  { pools: ["pool4", "pool5"], note: "技术合作伙伴是供应商", icon: "✅" },
+  { pools: ["pool4", "pool6"], note: "技术合作伙伴是客户", icon: "✅" },
+  { pools: ["pool4", "pool7"], note: "技术合作伙伴是股东", icon: "❗" },
+  { pools: ["pool4", "pool8"], note: "技术合作伙伴是投资企业", icon: "✅" },
+  { pools: ["pool7", "pool5"], note: "股东是供应商", icon: "❗" },
+  { pools: ["pool7", "pool6"], note: "股东是客户", icon: "❗" },
+  { pools: ["pool8", "pool5"], note: "投资企业是供应商", icon: "✅" },
+  { pools: ["pool8", "pool6"], note: "投资企业是客户", icon: "✅" },
+  { pools: ["pool1", "pool4", "pool5"], note: "供应安全高度不确定，断供转自用", icon: "⚡" },
+  { pools: ["pool1", "pool4", "pool6"], note: "技术外泄风险，但可收取专利费", icon: "❗" },
+  { pools: ["pool1", "pool5", "pool6"], note: "极危险，竞争对手掌握成本结构和销售数据", icon: "⚡" },
+  { pools: ["pool4", "pool5", "pool6"], note: "高粘性合作关系，但切换成本极高", icon: "✅" },
+  { pools: ["pool1", "pool4", "pool7"], note: "极高风险，股东+竞争对手双重身份", icon: "⚡" },
+  { pools: ["pool1", "pool4", "pool8"], note: "战略投资，需评估是否构成同业竞争", icon: "❗" },
+  { pools: ["pool1", "pool7", "pool8"], note: "股权网络混乱，利益冲突严重", icon: "❓" },
+  { pools: ["pool4", "pool7", "pool5"], note: "关联交易+技术依赖双重风险", icon: "❗" },
+  { pools: ["pool4", "pool7", "pool6"], note: "技术路线被股东主导", icon: "❗" },
+  { pools: ["pool4", "pool8", "pool5"], note: "供应链+技术双保险", icon: "✨" },
+  { pools: ["pool4", "pool8", "pool6"], note: "投资-技术-销售正向循环", icon: "✨" },
+  { pools: ["pool7", "pool8", "pool5"], note: "极度复杂的关联交易网络", icon: "❓" },
+  { pools: ["pool7", "pool8", "pool6"], note: "收入真实性存疑，可能虚增营收", icon: "⚡" },
+  { pools: ["pool5", "pool6", "pool8"], note: "产业链垂直整合，降低交易成本", icon: "✅" },
+  { pools: ["pool5", "pool6", "pool7"], note: "关联交易密集，审计重点关注", icon: "❓" },
+  { pools: ["pool2", "pool3", "pool8"], note: "循环经济闭环，产业链完整", icon: "✨" },
+  { pools: ["pool1", "pool5", "pool7"], note: "利益输送嫌疑", icon: "⚡" },
+  { pools: ["pool1", "pool6", "pool7"], note: "技术窃取风险", icon: "⚡" },
+  { pools: ["pool1", "pool5", "pool8"], note: "需评估投资逻辑", icon: "❗" },
+  { pools: ["pool1", "pool6", "pool8"], note: "战略投资，控制渠道", icon: "✅" },
+  { pools: ["pool1", "pool4", "pool5", "pool6"], note: "最危险关系——竞争对手掌握全部商业情报", icon: "⚡" },
+  { pools: ["pool4", "pool7", "pool5", "pool6"], note: "实际丧失经营独立性", icon: "⚡" },
+  { pools: ["pool4", "pool8", "pool5", "pool6"], note: "高度协同，但需防范内部定价问题", icon: "✅" },
+  { pools: ["pool1", "pool4", "pool5", "pool7"], note: "最高风险——股东可能通过供应断供逼企业就范", icon: "⚡" },
+  { pools: ["pool1", "pool4", "pool6", "pool7"], note: "客户流失=股东撤资双重打击", icon: "⚡" },
+  { pools: ["pool1", "pool4", "pool5", "pool8"], note: "投资可能反向增强竞争对手", icon: "❗" },
+  { pools: ["pool1", "pool4", "pool6", "pool8"], note: "战略矛盾", icon: "❗" },
+  { pools: ["pool7", "pool8", "pool5", "pool6"], note: "完全关联交易，外部审计会重点关注", icon: "❓" },
+  { pools: ["pool1", "pool5", "pool6", "pool7"], note: "利益冲突最大化", icon: "⚡" },
+  { pools: ["pool1", "pool5", "pool6", "pool8"], note: "战略投资还是战略失误？", icon: "❗" },
+  { pools: ["pool1", "pool4", "pool5", "pool6", "pool7"], note: "致命关系——已无独立性", icon: "⚡" },
+  { pools: ["pool1", "pool4", "pool5", "pool6", "pool8"], note: "战略自杀——培养替代者", icon: "⚡" },
+  { pools: ["pool4", "pool7", "pool8", "pool5", "pool6"], note: "财务黑洞——审计噩梦", icon: "⚡" }
+  ];
+
+  let crossRules = DEFAULT_CROSS_RULES.map(r => ({ pools: r.pools.slice(), note: r.note, icon: r.icon }));
+  function poolsToCombo(pools) {
+    return pools.map(p => p.replace('pool', '池')).join(' ∩ ');
+  }
+
+  // 计算节点命中规则：取满足的所有规则中最特异（池数量最多）的一条；数量相同则取列表中靠前的
+  function matchCrossRule(nodePools) {
+    if (!nodePools || nodePools.length === 0) return null;
+    let best = null;
+    for (const rule of crossRules) {
+      if (rule.pools.every(p => nodePools.includes(p))) {
+        if (!best || rule.pools.length > best.pools.length) best = rule;
+      }
+    }
+    return best;
+  }
+
+  // 渲染左侧配置列表
+  function renderCrossList() {
+    const list = $('crossList');
+    list.innerHTML = '';
+    crossRules.forEach((rule, idx) => {
+      const card = document.createElement('div');
+      card.className = 'cross-card';
+      card.innerHTML =
+        '<span class="cc-icon">' + rule.icon + '</span>' +
+        '<div class="cc-body">' +
+          '<div class="cc-combo">' + poolsToCombo(rule.pools) + '</div>' +
+          '<div class="cc-note">' + (rule.note || '') + '</div>' +
+        '</div>' +
+        '<button class="cc-del" title="删除该组合">✕</button>';
+      card.querySelector('.cc-del').onclick = () => {
+        crossRules.splice(idx, 1);
+        renderCrossList();
+        refreshGraph();
+      };
+      list.appendChild(card);
+    });
+  }
+
+  // 打开新增表单
+  function openCrossEditor() {
+    const editor = $('crossEditor');
+    editor.style.display = 'flex';
+    const poolsWrap = $('cePools');
+    poolsWrap.innerHTML = '';
+    const selectedPools = [];
+    ['pool1','pool2','pool3','pool4','pool5','pool6','pool7','pool8'].forEach(p => {
+      const chip = document.createElement('span');
+      chip.className = 'ce-pool';
+      chip.textContent = p.replace('pool', '池');
+      chip.onclick = () => {
+        const i = selectedPools.indexOf(p);
+        if (i >= 0) { selectedPools.splice(i, 1); chip.classList.remove('selected'); }
+        else if (selectedPools.length < 5) { selectedPools.push(p); chip.classList.add('selected'); }
+        $('ceErr').textContent = '';
+      };
+      poolsWrap.appendChild(chip);
+    });
+    const iconsWrap = $('ceIcons');
+    iconsWrap.innerHTML = '';
+    let selectedIcon = null;
+    CROSS_ICONS.forEach(ic => {
+      const box = document.createElement('span');
+      box.className = 'ce-ico';
+      box.textContent = ic;
+      box.onclick = () => {
+        iconsWrap.querySelectorAll('.ce-ico').forEach(b => b.classList.remove('selected'));
+        box.classList.add('selected');
+        selectedIcon = ic;
+        $('ceErr').textContent = '';
+      };
+      iconsWrap.appendChild(box);
+    });
+    $('ceNote').value = '';
+    $('ceErr').textContent = '';
+    $('ceNote').onkeydown = e => { if (e.key === 'Enter') $('ceSave').click(); };
+    // 由内部状态决定保存值，按钮点击时校验
+    window.__crossEditorState = { selectedPools, selectedIcon, get: () => ({ pools: selectedPools.slice(), icon: selectedIcon }) };
+    $('ceNote').focus();
+  }
+
+  function closeCrossEditor() {
+    $('crossEditor').style.display = 'none';
+    window.__crossEditorState = null;
+  }
+
+  function initCrossPanel() {
+    renderCrossList();
+    $('addCrossBtn').onclick = () => openCrossEditor();
+    $('ceCancel').onclick = () => closeCrossEditor();
+    $('ceSave').onclick = () => {
+      const st = window.__crossEditorState;
+      if (!st) return;
+      const { pools, icon } = st.get();
+      if (pools.length < 2 || pools.length > 5) {
+        $('ceErr').textContent = '请选择 2-5 个企业池';
+        return;
+      }
+      if (!icon) { $('ceErr').textContent = '请选择一个图标'; return; }
+      const note = $('ceNote').value.trim();
+      crossRules.unshift({ pools, note, icon });
+      closeCrossEditor();
+      renderCrossList();
+      refreshGraph();
+    };
+    $('resetCrossBtn').onclick = () => {
+      crossRules = [];
+      closeCrossEditor();
+      renderCrossList();
+      refreshGraph();
+    };
+  }
+
+  // 交叉配置变更后：若已有选中企业且数据已加载，则重新生成图谱以刷新图标
+  function refreshGraph() {
+    if (typeof selectedCompany !== 'undefined' && selectedCompany && parsedData) {
+      generateGraph(selectedCompany);
+    }
+  }
+
+  let graph = null;
+  let parsedData = null;
+  let currentNodeId = null;
+  let graphData = null;
+  let penetrationDepth = 1;   // 穿透层级，默认1级
+
+  const $ = id => document.getElementById(id);
+  const statusDot = $('statusDot');
+  const statusText = $('statusText');
+  const emptyState = $('emptyState');
+  let hasFileUploaded = false;
+
+  function setStatus(text, state) {
+    statusText.textContent = text;
+    statusDot.className = 'dot status-dot ' + state;
+    const statusItem = document.getElementById('statusItem');
+    if (state === 'idle') {
+      statusItem.classList.remove('has-file');
+    } else {
+      statusItem.classList.add('has-file');
+    }
+  }
+
+  function showEmptyState(mode) {
+    emptyState.classList.remove('hidden');
+    emptyState.style.display = 'flex';
+    // mode: 'upload'（未上传，显示上传按钮） / 'select'（已上传未选企业）
+    const isSelect = mode === 'select';
+    $('centerUpload').style.display = isSelect ? 'none' : 'flex';
+    $('centerSelect').style.display = isSelect ? 'flex' : 'none';
+  }
+
+  function hideEmptyState() {
+    emptyState.classList.add('hidden');
+    emptyState.style.display = 'none';
+  }
+
+  function resetFileUpload() {
+    parsedData = null;
+    hasFileUploaded = false;
+    allCompanies = [];
+    $('fileInput').value = '';
+    $('companyInput').value = '';
+    $('companyInput').disabled = true;
+    $('companyInput').placeholder = '-- 请选择企业 --';
+    $('companyDropdown').innerHTML = '';
+    $('companyDropdown').classList.remove('show');
+    $('generateBtn').disabled = true;
+    $('downloadBtn').disabled = true;
+    showEmptyState('upload');
+    if (graph) {
+      graph.graphData({ nodes: [], links: [] });
+      graph.width($('graphContainer').clientWidth);
+      graph.height($('graphContainer').clientHeight);
+      if (spaceManager) {
+        spaceManager.destroy();
+        spaceManager = null;
+      }
+    }
+    setStatus('等待上传数据', 'idle');
+  }
+
+  function downloadTemplate(e) {
+    if (e) e.preventDefault();
+    fetch('示例模板.xlsx')
+      .then(response => response.blob())
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '示例模板.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      })
+      .catch(err => {
+        console.error('下载失败:', err);
+        alert('下载模板失败，请检查服务器是否正常运行');
+      });
+  }
+
+  // 导出穿透结果 Excel（5个sheet：主目录、1层、2层、3层、汇总）
+  function exportPenetrationExcel() {
+    if (!graphData || !graphData.nodes || !graphData.nodes.length) {
+      alert('请先生成图谱后再下载');
+      return;
+    }
+    const POOL_ORDER = ['pool1','pool2','pool3','pool4','pool5','pool6','pool7','pool8'];
+    const center = graphData.nodes.find(n => n.isCenter);
+    const centerLabel = center ? center.label : '';
+
+    // 无论页面选择几层穿透、也不受层级企业数量上限限制，导出全部关联企业（仍遵循“不回往回关联”的发散规则）
+    const full = computePenetration(centerLabel, 3, true);
+
+    const relStr = node => (node.pools || []).slice()
+      .sort((a, b) => POOL_ORDER.indexOf(a) - POOL_ORDER.indexOf(b))
+      .map(p => POOL_LABELS[p] || p).join(',');
+    const crossStr = node => node.crossIcon ? node.crossIcon + ' ' + (node.crossNote || '') : (node.crossNote || '');
+
+    // 交叉分析组合命中顺序（命中列表越靠前越优先，未命中为无穷大）
+    const crossIdx = pools => {
+      for (let i = 0; i < crossRules.length; i++) {
+        if (crossRules[i].pools.every(p => pools.indexOf(p) >= 0)) return i;
+      }
+      return Infinity;
+    };
+
+    // 每个层级：父 -> 子 一行；同一父企业下的关联企业先按关系个数倒序，再按交叉分析组合顺序排序
+    const levelRows = { 1: [], 2: [], 3: [] };
+    [1,2,3].forEach(L => {
+      const byParent = {};   // parent -> [node]
+      full.nodes.forEach(n => {
+        if (!n.isCenter && n.level === L) {
+          (byParent[n.parent] = byParent[n.parent] || []).push(n);
+        }
+      });
+      Object.keys(byParent).forEach(parent => {
+        byParent[parent].sort((a, b) => {
+          if (b.pools.length !== a.pools.length) return b.pools.length - a.pools.length;   // ① 关系个数从多到少
+          const d = crossIdx(a.pools) - crossIdx(b.pools);                                 // ② 交叉分析组合顺序
+          if (d !== 0) return d;
+          return a.label.localeCompare(b.label, 'zh');                                     // ③ 同名兜底，保证稳定
+        });
+        byParent[parent].forEach(n => {
+          levelRows[L].push({ parent: n.parent, child: n.label, rel: relStr(n), cross: crossStr(n) });
+        });
+      });
+    });
+
+    // 父企业在"下一层"sheet 的起始行（数据区自第3行起）
+    const parentRow = { 2: {}, 3: {} };
+    [2,3].forEach(L => {
+      const map = parentRow[L];
+      levelRows[L].forEach((r, i) => { if (!(r.parent in map)) map[r.parent] = i + 3; });
+    });
+
+    // 汇总：每个叶/分支端点为一行，B=1层企业, E=2层企业, H=3层企业
+    const child2 = {}, child3 = {};
+    levelRows[2].forEach(r => { (child2[r.parent] = child2[r.parent] || []).push(r); });
+    levelRows[3].forEach(r => { (child3[r.parent] = child3[r.parent] || []).push(r); });
+    const sumRows = [];
+    levelRows[1].forEach(r1 => {
+      const c2 = child2[r1.child] || [];
+      if (!c2.length) { sumRows.push({ B: r1, E: null, H: null }); return; }
+      c2.forEach(r2 => {
+        const c3 = child3[r2.child] || [];
+        if (!c3.length) { sumRows.push({ B: r1, E: r2, H: null }); return; }
+        c3.forEach(r3 => sumRows.push({ B: r1, E: r2, H: r3 }));
+      });
+    });
+
+    const enc = (r, c) => XLSX.utils.encode_cell({ r, c });
+    // 收集各 sheet 描述，最后统一生成并下载（社区版 SheetJS 无法写入样式，故自行组装 OOXML）
+    const sheets = [];   // { name, cells, ref, headers }
+    function addSheet(name, cells, ref, headers) {
+      sheets.push({ name, cells, ref, headers });
+    }
+
+    // ---- 主目录 ----
+    const toc = {};
+    toc['A1'] = { v: '穿透层级' }; toc['B1'] = { v: '数据行数' }; toc['C1'] = { v: '超链接' };
+    const tocData = [
+      ['1层', levelRows[1].length, "#'1层'!A1"],
+      ['2层', levelRows[2].length, "#'2层'!A1"],
+      ['3层', levelRows[3].length, "#'3层'!A1"],
+      ['汇总', sumRows.length, '#汇总!A1']
+    ];
+    tocData.forEach((r, i) => {
+      const row = i + 1;
+      toc[enc(row, 0)] = { v: r[0] };
+      toc[enc(row, 1)] = { v: r[1], t: 'n' };
+      toc[enc(row, 2)] = { v: '点击跳转', link: r[2] };
+    });
+    addSheet('主目录', toc, 'A1:C5', ['A1', 'B1', 'C1']);
+
+    // ---- 1层 / 2层 / 3层 ----
+    const LEVEL_SHEET = { 1: '1层', 2: '2层', 3: '3层' };
+    [1,2,3].forEach(L => {
+      const cells = {};
+      cells['A1'] = { v: '主目录', link: '##主目录!A1' };
+      cells['A2'] = { v: '中心企业' }; cells['B2'] = { v: '关联企业' };
+      cells['C2'] = { v: '关联关系' }; cells['D2'] = { v: '交叉分析' };
+      const rows = levelRows[L];
+      rows.forEach((r, i) => {
+        const row = i + 2;
+        cells[enc(row, 0)] = { v: r.parent };
+        cells[enc(row, 1)] = { v: r.child };
+        cells[enc(row, 2)] = { v: r.rel };
+        if (r.cross) cells[enc(row, 3)] = { v: r.cross };
+        if (L < 3) {
+          const m = parentRow[L + 1];
+          if (m[r.child] !== undefined) cells[enc(row, 1)].link = "#'" + LEVEL_SHEET[L + 1] + "'!A" + m[r.child];
+        }
+      });
+      addSheet(LEVEL_SHEET[L], cells, 'A1:D' + (2 + rows.length), ['A2', 'B2', 'C2', 'D2']);
+    });
+
+    // ---- 汇总 ----
+    const s = {};
+    s['A1'] = { v: '主目录', link: '##主目录!A1' };
+    ['中心企业','1层关联企业','关联关系','交叉分析','2层关联企业','关联关系','交叉分析','3层关联企业','关联关系','交叉分析']
+      .forEach((h, c) => { s[enc(1, c)] = { v: h }; });
+    sumRows.forEach((sum, i) => {
+      const row = i + 2;
+      s[enc(row, 0)] = { v: centerLabel };
+      if (sum.B) {
+        const b = { v: sum.B.child };
+        if (parentRow[2][sum.B.child] !== undefined) b.link = "#'2层'!A" + parentRow[2][sum.B.child];
+        s[enc(row, 1)] = b;
+        if (sum.B.rel) s[enc(row, 2)] = { v: sum.B.rel };
+        if (sum.B.cross) s[enc(row, 3)] = { v: sum.B.cross };
+      }
+      if (sum.E) {
+        const e = { v: sum.E.child };
+        if (parentRow[3][sum.E.child] !== undefined) e.link = "#'3层'!A" + parentRow[3][sum.E.child];
+        s[enc(row, 4)] = e;
+        if (sum.E.rel) s[enc(row, 5)] = { v: sum.E.rel };
+        if (sum.E.cross) s[enc(row, 6)] = { v: sum.E.cross };
+      }
+      if (sum.H) {
+        s[enc(row, 7)] = { v: sum.H.child };
+        if (sum.H.rel) s[enc(row, 8)] = { v: sum.H.rel };
+        if (sum.H.cross) s[enc(row, 9)] = { v: sum.H.cross };
+      }
+    });
+    addSheet('汇总', s, 'A1:J' + (2 + sumRows.length),
+      ['A2', 'B2', 'C2', 'D2', 'E2', 'F2', 'G2', 'H2', 'I2', 'J2']);
+
+    const fname = centerLabel ? centerLabel + '_穿透结果.xlsx' : '穿透结果.xlsx';
+    const bytes = buildStyledXlsx(sheets);
+    const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // ============ 自建带格式的 XLSX 生成器 ============
+  // 说明：社区版 SheetJS 无法写入单元格样式，因此导出部分用原生 OOXML + STORED ZIP 自行组装，
+  // 以支持：宋体11、字段名#339966底白字加粗斜体、超链接下划线、列宽统一 8.43。
+  function buildStyledXlsx(sheets) {
+    const enc = new TextEncoder();
+    const entries = [];
+    entries.push({ name: '[Content_Types].xml', data: enc.encode(contentTypesXml(sheets.length)) });
+    entries.push({ name: '_rels/.rels', data: enc.encode(rootRelsXml()) });
+    entries.push({ name: 'xl/workbook.xml', data: enc.encode(workbookXml(sheets.map(s => s.name))) });
+    entries.push({ name: 'xl/_rels/workbook.xml.rels', data: enc.encode(workbookRelsXml(sheets.length)) });
+    entries.push({ name: 'xl/styles.xml', data: enc.encode(stylesXml()) });
+    entries.push({ name: 'xl/theme/theme1.xml', data: enc.encode(themeXml()) });
+    sheets.forEach((s, i) => {
+      entries.push({ name: 'xl/worksheets/sheet' + (i + 1) + '.xml', data: enc.encode(sheetXml(s.name, s.cells, s.ref, s.headers)) });
+    });
+    return buildZip(entries);
+  }
+
+  function escXml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function colIndex(letters) { let n = 0; for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64); return n; }
+
+  // ---- ZIP（STORED，无压缩） ----
+  const ZIP_CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; } return t; })();
+  function zipCrc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = (ZIP_CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8)) >>> 0; return (c ^ 0xFFFFFFFF) >>> 0; }
+  function concatBytes(arr) { let len = 0; for (const a of arr) len += a.length; const out = new Uint8Array(len); let o = 0; for (const a of arr) { out.set(a, o); o += a.length; } return out; }
+  function buildZip(entries) {
+    const enc = new TextEncoder(); const parts = []; const central = []; let offset = 0;
+    for (const e of entries) {
+      const name = enc.encode(e.name); const data = e.data; const crc = zipCrc32(data);
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0, true);
+      lh.setUint16(8, 0, true); lh.setUint16(10, 0, true); lh.setUint16(12, 0, true);
+      lh.setUint32(14, crc, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true);
+      lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+      parts.push(new Uint8Array(lh.buffer), name, data);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
+      ch.setUint16(8, 0, true); ch.setUint16(10, 0, true); ch.setUint16(12, 0, true); ch.setUint16(14, 0, true);
+      ch.setUint32(16, crc, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true);
+      ch.setUint16(28, name.length, true); ch.setUint16(30, 0, true); ch.setUint16(32, 0, true);
+      ch.setUint16(34, 0, true); ch.setUint16(36, 0, true); ch.setUint32(38, 0, true); ch.setUint32(42, offset, true);
+      central.push(new Uint8Array(ch.buffer), name); offset += 30 + name.length + data.length;
+    }
+    const cdSize = central.reduce((a, b) => a + b.length, 0); const cdOffset = offset;
+    const eocd = new DataView(new ArrayBuffer(22));
+    eocd.setUint32(0, 0x06054b50, true); eocd.setUint16(4, 0, true); eocd.setUint16(6, 0, true);
+    eocd.setUint16(8, entries.length, true); eocd.setUint16(10, entries.length, true);
+    eocd.setUint32(12, cdSize, true); eocd.setUint32(16, cdOffset, true); eocd.setUint16(20, 0, true);
+    parts.push(...central, new Uint8Array(eocd.buffer));
+    return concatBytes(parts);
+  }
+
+  // ---- 各类 OOXML ----
+  function stylesXml() {
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<fonts count="3">' +
+      '<font><sz val="10"/><color rgb="FF000000"/><name val="微软雅黑"/></font>' +
+      '<font><b/><i/><sz val="10"/><color rgb="FFFFFFFF"/><name val="微软雅黑"/></font>' +
+      '<font><u/><sz val="10"/><color rgb="FF000000"/><name val="微软雅黑"/></font>' +
+      '</fonts>' +
+      '<fills count="3">' +
+      '<fill><patternFill patternType="none"/></fill>' +
+      '<fill><patternFill patternType="gray125"/></fill>' +
+      '<fill><patternFill patternType="solid"><fgColor rgb="FF339966"/><bgColor indexed="64"/></patternFill></fill>' +
+      '</fills>' +
+      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="3">' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>' +
+      '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>' +
+      '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>' +
+      '</cellXfs>' +
+      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+      '<dxfs count="0"/><tableStyles count="0" defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotStyleMedium4"/>' +
+      '</styleSheet>';
+  }
+  function themeXml() {
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office Theme">' +
+      '<a:themeElements>' +
+      '<a:clrScheme name="Office"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>' +
+      '<a:dk2><a:srgbClr val="1F497D"/></a:dk2><a:lt2><a:srgbClr val="EEECE1"/></a:lt2>' +
+      '<a:accent1><a:srgbClr val="4F81BD"/></a:accent1><a:accent2><a:srgbClr val="C0504D"/></a:accent2>' +
+      '<a:accent3><a:srgbClr val="9BBB59"/></a:accent3><a:accent4><a:srgbClr val="8064A2"/></a:accent4>' +
+      '<a:accent5><a:srgbClr val="4BACC6"/></a:accent5><a:accent6><a:srgbClr val="F79646"/></a:accent6>' +
+      '<a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink></a:clrScheme>' +
+      '<a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>' +
+      '<a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>' +
+      '<a:fmtScheme name="Office">' +
+      '<a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill>' +
+      '<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"><a:tint val="50000"/><a:satMod val="300000"/></a:schemeClr></a:gs>' +
+      '<a:gs pos="100000"><a:schemeClr val="phClr"><a:tint val="15000"/><a:satMod val="350000"/></a:schemeClr></a:gs></a:gsLst><a:lin ang="16200000" scaled="1"/></a:gradFill></a:fillStyleLst>' +
+      '<a:lnStyleLst><a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln>' +
+      '<a:ln w="25400" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln>' +
+      '<a:ln w="38100" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln></a:lnStyleLst>' +
+      '<a:effectStyleLst><a:effectStyle><a:effectLst/><a:scene3d/><a:sp3d/></a:effectStyle></a:effectStyleLst>' +
+      '<a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill>' +
+      '<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"/></a:gs><a:gs pos="100000"><a:schemeClr val="phClr"/></a:gs></a:gsLst></a:gradFill></a:bgFillStyleLst>' +
+      '</a:fmtScheme></a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>';
+  }
+  function workbookXml(names) {
+    const sheetsTag = names.map((n, i) => '<sheet name="' + escXml(n) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>').join('');
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      '<sheets>' + sheetsTag + '</sheets></workbook>';
+  }
+  function workbookRelsXml(n) {
+    let r = '';
+    for (let i = 1; i <= n; i++) r += '<Relationship Id="rId' + i + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + i + '.xml"/>';
+    r += '<Relationship Id="rId' + (n + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
+    r += '<Relationship Id="rId' + (n + 2) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>';
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + r + '</Relationships>';
+  }
+  function contentTypesXml(n) {
+    let s = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>';
+    for (let i = 1; i <= n; i++) s += '<Override PartName="/xl/worksheets/sheet' + i + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+    s += '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>';
+    s += '<Override PartName="/xl/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>';
+    s += '</Types>';
+    return s;
+  }
+  function rootRelsXml() {
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+      '</Relationships>';
+  }
+  function toLocation(link) {
+    let s = String(link).replace(/^#+/, '');
+    const m = s.match(/^(.+)!(.+)$/);
+    if (m) { let sheet = m[1], c = m[2]; if (!/^['"]/.test(sheet)) sheet = "'" + sheet + "'"; return sheet + '!' + c; }
+    return s;
+  }
+  function sheetXml(name, cells, ref, headerAddrs) {
+    const headerSet = new Set(headerAddrs || []);
+    const lastCol = ref.split(':')[1].match(/^([A-Z]+)/)[1];
+    const colCount = colIndex(lastCol);
+    let cols = '<cols>';
+    for (let i = 1; i <= colCount; i++) cols += '<col min="' + i + '" max="' + i + '" width="8.43" customWidth="1"/>';
+    cols += '</cols>';
+    const rows = {}; const links = [];
+    for (const addr in cells) {
+      const cd = cells[addr]; if (!cd) continue;
+      const m = addr.match(/^([A-Z]+)(\d+)$/); if (!m) continue;
+      const col = m[1]; const row = +m[2];
+      const isHeader = headerSet.has(addr);
+      const sAtt = isHeader ? ' s="1"' : (cd.link ? ' s="2"' : '');
+      const isNum = cd.t === 'n';
+      const tAtt = ' t="' + (isNum ? 'n' : 'inlineStr') + '"';
+      const content = isNum ? '<v>' + cd.v + '</v>' : '<is><t xml:space="preserve">' + escXml(cd.v) + '</t></is>';
+      (rows[row] = rows[row] || []).push({ idx: colIndex(col), xml: '<c r="' + addr + '"' + tAtt + sAtt + '>' + content + '</c>' });
+      if (cd.link) links.push('<hyperlink ref="' + addr + '" location="' + escXml(toLocation(cd.link)) + '"/>');
+    }
+    let body = '<sheetData>';
+    Object.keys(rows).map(Number).sort((a, b) => a - b).forEach(r => {
+      rows[r].sort((a, b) => a.idx - b.idx);
+      body += '<row r="' + r + '">' + rows[r].map(x => x.xml).join('') + '</row>';
+    });
+    body += '</sheetData>';
+    if (links.length) body += '<hyperlinks>' + links.join('') + '</hyperlinks>';
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      '<dimension ref="' + ref + '"/>' +
+      '<sheetViews><sheetView workbookViewId="0"/></sheetViews>' +
+      '<sheetFormatPr defaultRowHeight="15"/>' +
+      cols + body + '</worksheet>';
+  }
+
+  $('downloadBtn').addEventListener('click', exportPenetrationExcel);
+
+  $('centerUploadBtn').addEventListener('click', () => {
+    $('fileInput').click();
+  });
+
+  const statusItemEl = $('statusItem');
+  statusItemEl.addEventListener('mouseenter', () => {
+    if (statusItemEl.classList.contains('has-file')) {
+      statusItemEl.classList.add('is-hover');
+    }
+  });
+  statusItemEl.addEventListener('mouseleave', () => {
+    statusItemEl.classList.remove('is-hover');
+  });
+
+  $('statusDeleteBtn').addEventListener('click', resetFileUpload);
+
+  $('fileInput').addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setStatus('正在解析文件...', 'loading');
+    hasFileUploaded = true;
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array' });
+      parsedData = parseWorkbook(wb);
+
+      const companies = getAllCompanies(parsedData);
+      populateCompanySelect(companies);
+
+      showEmptyState('select');
+      setStatus('数据加载成功，共 ' + companies.length + ' 家企业', 'success');
+    } catch (err) {
+      console.error(err);
+      setStatus('解析失败: ' + err.message, 'error');
+      hasFileUploaded = false;
+      $('fileInput').value = '';
+    }
+  });
+
+  function parseWorkbook(wb) {
+    const result = {};
+    const sheetToTable = {
+      [TABLE_NAMES.productMaterial]: 'productMaterial',
+      [TABLE_NAMES.companyProduct]: 'companyProduct',
+      [TABLE_NAMES.patentOwner]: 'patentOwner',
+      [TABLE_NAMES.supplyChain]: 'supplyChain',
+      [TABLE_NAMES.equityInvestment]: 'equityInvestment'
+    };
+
+    for (const [sheetName, key] of Object.entries(sheetToTable)) {
+      const ws = wb.Sheets[sheetName];
+      if (!ws) {
+        result[key] = [];
+        continue;
+      }
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (rows.length <= 1) {
+        result[key] = [];
+        continue;
+      }
+      const headers = rows[0];
+      result[key] = rows.slice(1).filter(r => r.length >= 2).map(r => ({
+        [headers[0]]: String(r[0]).trim(),
+        [headers[1]]: String(r[1]).trim()
+      }));
+    }
+    return result;
+  }
+
+  function getAllCompanies(data) {
+    const set = new Set();
+    data.companyProduct.forEach(r => set.add(r['企业']));
+    data.supplyChain.forEach(r => { set.add(r['供方']); set.add(r['销方']); });
+    data.equityInvestment.forEach(r => { set.add(r['股东']); set.add(r['被投资企业']); });
+    data.patentOwner.forEach(r => set.add(r['专利权人']));
+    return Array.from(set).sort();
+  }
+
+  let allCompanies = [];
+  let selectedCompany = null;
+  let highlightedIndex = -1;
+
+  function populateCompanySelect(companies) {
+    allCompanies = companies;
+    const input = $('companyInput');
+    const dropdown = $('companyDropdown');
+    input.disabled = false;
+    input.placeholder = '请输入企业名称搜索...';
+    input.value = '';
+    dropdown.innerHTML = '';
+    dropdown.classList.remove('show');
+    highlightedIndex = -1;
+    $('generateBtn').disabled = false;
+  }
+
+  function showDropdown(filter) {
+    const dropdown = $('companyDropdown');
+    const input = $('companyInput');
+    dropdown.innerHTML = '';
+    
+    let filtered = allCompanies;
+    if (filter) {
+      filtered = allCompanies.filter(c => c.toLowerCase().includes(filter.toLowerCase()));
+    }
+    
+    if (filtered.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'dropdown-empty';
+      empty.textContent = '未找到匹配的企业';
+      dropdown.appendChild(empty);
+    } else {
+      filtered.forEach((c, idx) => {
+        const item = document.createElement('div');
+        item.className = 'dropdown-item';
+        item.textContent = c;
+        item.dataset.company = c;
+        item.dataset.index = idx;
+        item.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          selectCompany(c);
+        });
+        item.addEventListener('mouseenter', () => {
+          highlightedIndex = idx;
+          updateHighlight();
+        });
+        dropdown.appendChild(item);
+      });
+    }
+    
+    highlightedIndex = -1;
+    dropdown.classList.add('show');
+  }
+
+  function hideDropdown() {
+    $('companyDropdown').classList.remove('show');
+    highlightedIndex = -1;
+  }
+
+  function updateHighlight() {
+    const items = $('companyDropdown').querySelectorAll('.dropdown-item');
+    items.forEach((item, idx) => {
+      if (idx === highlightedIndex) {
+        item.classList.add('highlighted');
+        item.scrollIntoView({ block: 'nearest' });
+      } else {
+        item.classList.remove('highlighted');
+      }
+    });
+  }
+
+  function selectCompany(company) {
+    selectedCompany = company;
+    $('companyInput').value = company;
+    $('companyInput').placeholder = '';
+    hideDropdown();
+    $('generateBtn').disabled = false;
+  }
+
+  $('companyInput').addEventListener('input', function(e) {
+    const value = e.target.value.trim();
+    selectedCompany = null;
+    showDropdown(value);
+  });
+
+  $('companyInput').addEventListener('focus', function() {
+    if (allCompanies.length > 0) {
+      showDropdown(this.value.trim());
+    }
+  });
+
+  $('companyInput').addEventListener('blur', function() {
+    setTimeout(() => {
+      if (!selectedCompany) {
+        this.value = '';
+        this.placeholder = '请输入企业名称搜索...';
+      }
+      hideDropdown();
+    }, 200);
+  });
+
+  $('companyInput').addEventListener('keydown', function(e) {
+    const items = $('companyDropdown').querySelectorAll('.dropdown-item');
+    if (items.length === 0) return;
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
+      updateHighlight();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      highlightedIndex = Math.max(highlightedIndex - 1, 0);
+      updateHighlight();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightedIndex >= 0 && items[highlightedIndex]) {
+        selectCompany(items[highlightedIndex].dataset.company);
+      } else if (selectedCompany) {
+        generateGraph(selectedCompany);
+      }
+    } else if (e.key === 'Escape') {
+      hideDropdown();
+    }
+  });
+
+  $('generateBtn').addEventListener('click', function() {
+    if (!selectedCompany) {
+      const input = $('companyInput');
+      if (input.value.trim() && allCompanies.includes(input.value.trim())) {
+        selectCompany(input.value.trim());
+      } else {
+        return;
+      }
+    }
+    if (selectedCompany) {
+      generateGraph(selectedCompany);
+    }
+  });
+
+  document.querySelectorAll('input[name="penetrationDepth"]').forEach(rb => {
+    rb.addEventListener('change', function() {
+      penetrationDepth = parseInt(this.value, 10) || 1;
+      if (selectedCompany && parsedData) {
+        generateGraph(selectedCompany);
+      }
+    });
+  });
+
+  function generateGraph(company) {
+    if (!parsedData) return;
+
+    $('loadingOverlay').classList.add('active');
+    $('loadingText').textContent = penetrationDepth > 1
+      ? '正在计算企业穿透关系（' + penetrationDepth + '层）...'
+      : '正在计算企业关系...';
+
+    setTimeout(() => {
+      try {
+        buildAndRenderGraph(company, penetrationDepth);
+        $('downloadBtn').disabled = false;
+        $('loadingOverlay').classList.remove('active');
+        hideEmptyState();
+      } catch (err) {
+        console.error(err);
+        $('loadingText').textContent = '生成失败: ' + err.message;
+        setTimeout(() => $('loadingOverlay').classList.remove('active'), 2000);
+      }
+    }, 100);
+  }
+
+  function computePools(company, data) {
+    const pools = { pool1: [], pool2: [], pool3: [], pool4: [], pool5: [], pool6: [], pool7: [], pool8: [] };
+
+    const myProducts = data.companyProduct
+      .filter(r => r['企业'] === company)
+      .map(r => r['产品']);
+
+    // 池1: 同业 - 主营相同产品的其他企业
+    const pool1Set = new Set();
+    myProducts.forEach(prod => {
+      data.companyProduct
+        .filter(r => r['产品'] === prod && r['企业'] !== company)
+        .forEach(r => pool1Set.add(r['企业']));
+    });
+    pools.pool1 = Array.from(pool1Set);
+
+    // 池2: 上游-潜在供应商 - 产品原料对应的企业
+    const pool2Set = new Set();
+    myProducts.forEach(prod => {
+      const materials = data.productMaterial
+        .filter(r => r['产品'] === prod)
+        .map(r => r['原料']);
+      materials.forEach(mat => {
+        data.companyProduct
+          .filter(r => r['产品'] === mat && r['企业'] !== company)
+          .forEach(r => pool2Set.add(r['企业']));
+      });
+    });
+    pools.pool2 = Array.from(pool2Set);
+
+    // 池3: 下游-潜在客户 - 产品作为原料, 反向找
+    const pool3Set = new Set();
+    myProducts.forEach(prod => {
+      const productsUsingAsMaterial = data.productMaterial
+        .filter(r => r['原料'] === prod)
+        .map(r => r['产品']);
+      productsUsingAsMaterial.forEach(p => {
+        data.companyProduct
+          .filter(r => r['产品'] === p && r['企业'] !== company)
+          .forEach(r => pool3Set.add(r['企业']));
+      });
+    });
+    pools.pool3 = Array.from(pool3Set);
+
+    // 池4: 同业-技术合作 - 共享专利
+    const myPatents = data.patentOwner
+      .filter(r => r['专利权人'] === company)
+      .map(r => r['专利']);
+    const pool4Set = new Set();
+    myPatents.forEach(pat => {
+      data.patentOwner
+        .filter(r => r['专利'] === pat && r['专利权人'] !== company)
+        .forEach(r => pool4Set.add(r['专利权人']));
+    });
+    pools.pool4 = Array.from(pool4Set);
+
+    // 池5: 上游-供应商 - 被选中企业作为销方, 对应的供方
+    const pool5Set = new Set();
+    data.supplyChain
+      .filter(r => r['销方'] === company && r['供方'] !== company)
+      .forEach(r => pool5Set.add(r['供方']));
+    pools.pool5 = Array.from(pool5Set);
+
+    // 池6: 下游-客户 - 被选中企业作为供方, 对应的销方
+    const pool6Set = new Set();
+    data.supplyChain
+      .filter(r => r['供方'] === company && r['销方'] !== company)
+      .forEach(r => pool6Set.add(r['销方']));
+    pools.pool6 = Array.from(pool6Set);
+
+    // 池7: 投资-股东 - 被选中企业作为被投资企业, 对应的股东
+    const pool7Set = new Set();
+    data.equityInvestment
+      .filter(r => r['被投资企业'] === company && r['股东'] !== company)
+      .forEach(r => pool7Set.add(r['股东']));
+    pools.pool7 = Array.from(pool7Set);
+
+    // 池8: 投资-被投资企业 - 被选中企业作为股东, 对应的被投资企业
+    const pool8Set = new Set();
+    data.equityInvestment
+      .filter(r => r['股东'] === company && r['被投资企业'] !== company)
+      .forEach(r => pool8Set.add(r['被投资企业']));
+    pools.pool8 = Array.from(pool8Set);
+
+    // 互斥规则: 池5(供应商)中的企业从池2(潜在供应商)中移除
+    pools.pool2 = pools.pool2.filter(c => !pool5Set.has(c));
+    // 互斥规则: 池6(客户)中的企业从池3(潜在客户)中移除
+    pools.pool3 = pools.pool3.filter(c => !pool6Set.has(c));
+
+    return pools;
+  }
+
+  function computePenetration(centerCompany, depth, noLimit) {
+    const maxDepth = depth || 1;
+    const POOL_KEYS = ['pool1','pool2','pool3','pool4','pool5','pool6','pool7','pool8'];
+    // 层级企业数量上限：1层≤10、2层≤30、3层≤60
+    const LEVEL_MAX = { 1: 10, 2: 30, 3: 60 };
+    // 每个父企业传到下一层最多新增企业数：1层父→2层最多3家；2层父→3层最多2家
+    const PARENT_EXPAND = { 1: 3, 2: 2 };
+
+    const nodeMap = {};      // id -> node
+    const visited = new Set([centerCompany]);
+
+    const center = {
+      id: centerCompany, label: centerCompany, isCenter: true,
+      level: 0, parent: null, pools: [],
+      color: '#8b5cf6', size: 24
+    };
+    nodeMap[centerCompany] = center;
+
+    const links = [];
+    const seenLinks = new Set();   // 去重：同一(源|目标|关系类型)只保留一条
+
+    // 返回 comp 指向的全部候选企业 [{id, pools}]（排除中心企业，避免环）
+    function candidatesOf(comp) {
+      let pools;
+      try { pools = computePools(comp, parsedData); }
+      catch (e) { return []; }
+      const out = {};
+      POOL_KEYS.forEach(pk => {
+        (pools[pk] || []).forEach(c => {
+          if (c === centerCompany) return;
+          if (!out[c]) out[c] = [];
+          out[c].push(pk);
+        });
+      });
+      return Object.keys(out).map(id => ({ id: id, pools: out[id] }));
+    }
+
+    // 企业选择优先级（就地排序）：
+    // - 有交叉分析配置：按组合规则“从上到下”优先
+    // - 无交叉配置：按角色个数从多到少优先，同角色数随机
+    function prioritize(list) {
+      if (crossRules && crossRules.length > 0) {
+        list.sort((a, b) => firstCrossRuleIndex(a.pools) - firstCrossRuleIndex(b.pools));
+      } else {
+        list.sort((a, b) => {
+          const d = b.pools.length - a.pools.length;
+          if (d !== 0) return d;
+          return Math.random() - 0.5;
+        });
+      }
+      return list;
+    }
+
+    // 返回企业命中的最靠前组合规则下标；未命中任何组合返回 Infinity
+    function firstCrossRuleIndex(pools) {
+      for (let i = 0; i < crossRules.length; i++) {
+        if (crossRules[i].pools.every(p => pools.indexOf(p) >= 0)) return i;
+      }
+      return Infinity;
+    }
+
+    // 新增一个发散节点与对应连线
+    function addNode(cand, level, parent) {
+      if (visited.has(cand.id)) return;
+      visited.add(cand.id);
+      nodeMap[cand.id] = {
+        id: cand.id, label: cand.id, isCenter: false,
+        level: level, parent: parent, pools: cand.pools,
+        color: '#a0a0a0',
+        size: level === 1 ? 10 : (level === 2 ? 8 : 6)
+      };
+      cand.pools.forEach(pk => {
+        const key = parent + '|' + cand.id + '|' + pk;
+        if (seenLinks.has(key)) return;
+        seenLinks.add(key);
+        links.push({ source: parent, target: cand.id, color: POOL_COLORS[pk], poolKey: pk });
+      });
+    }
+
+    // ---- 第 1 层：从中心企业全部候选中，按优先级取前 20 家 ----
+    const l1Picked = prioritize(candidatesOf(centerCompany));
+    if (!noLimit) l1Picked.length = Math.min(l1Picked.length, LEVEL_MAX[1]);
+    l1Picked.forEach(c => addNode(c, 1, centerCompany));
+
+    // ---- 第 2、3 层：逐层由上一层父企业各自展开（纯发散，只取未出现过的新企业） ----
+    let frontier = l1Picked.map(c => c.id);
+    for (let level = 2; level <= maxDepth; level++) {
+      if (frontier.length === 0) break;
+      const parentCap = PARENT_EXPAND[level - 1] || 1;   // 每个父企业到本层最多新增数
+      const nextFrontier = [];
+      if (noLimit) {
+        // 无上限导出：同一企业若同时是多个父企业的候选，归属到与之关系最紧密的父企业
+        // （池数最多的父企业；池数相同则父企业出现顺序靠前者优先），保证层级归属稳定
+        const parentOrder = {};
+        frontier.forEach((p, idx) => { parentOrder[p] = idx; });
+        const best = {};   // child -> { parent, count, cand }
+        frontier.forEach(parent => {
+          const parentNode = nodeMap[parent];
+          if (!parentNode || parentNode.level !== level - 1) return;
+          candidatesOf(parent).filter(c => !visited.has(c.id)).forEach(c => {
+            const cur = best[c.id];
+            if (!cur || c.pools.length > cur.count ||
+                (c.pools.length === cur.count && parentOrder[parent] < parentOrder[cur.parent])) {
+              best[c.id] = { parent: parent, count: c.pools.length, cand: c };
+            }
+          });
+        });
+        Object.keys(best).forEach(childId => {
+          const rec = best[childId];
+          const sizeBefore = visited.size;
+          addNode(rec.cand, level, rec.parent);
+          if (visited.size > sizeBefore) nextFrontier.push(childId);
+        });
+      } else {
+        frontier.forEach(parent => {
+          const parentNode = nodeMap[parent];
+          if (!parentNode || parentNode.level !== level - 1) return;
+          const cands = candidatesOf(parent).filter(c => !visited.has(c.id));
+          const picked = prioritize(cands);
+          picked.length = Math.min(picked.length, parentCap);
+          picked.forEach(c => { addNode(c, level, parent); nextFrontier.push(c.id); });
+        });
+      }
+      frontier = nextFrontier;
+    }
+
+    const nodes = Object.values(nodeMap);
+
+    // 交叉分析：计算每个节点命中的第一条规则，用于在圆球上叠加图标
+    nodes.forEach(node => {
+      const hit = matchCrossRule(node.pools);
+      node.crossIcon = hit ? hit.icon : null;
+      node.crossNote = hit ? hit.note : '';
+    });
+
+    return { nodes, links };
+  }
+
+  function buildAndRenderGraph(centerCompany, depth) {
+    graphData = computePenetration(centerCompany, depth);
+    renderGraph(graphData, centerCompany);
+  }
+
+  const SPACE_COLORS = {
+    upstream: 0x1890ff,
+    horizontal: 0xff4d4f,
+    downstream: 0x52c41a,
+    investment: 0xfaad14
+  };
+
+  const SPACE_MAPPING = {
+    pool1: 'horizontal', pool4: 'horizontal',
+    pool2: 'upstream', pool5: 'upstream',
+    pool3: 'downstream', pool6: 'downstream',
+    pool7: 'investment', pool8: 'investment'
+  };
+
+  const SPACE_LABELS = {
+    upstream: '上游', horizontal: '同业', downstream: '下游', investment: '投资'
+  };
+
+  let spaceManager = null;
+
+  function renderGraph(data, centerId) {
+    const container = $('graphContainer');
+
+    if (graph) {
+      // Clean up graph manually (3d-force-graph doesn't have destroy())
+      try {
+        graph.graphData({ nodes: [], links: [] });
+        if (graph.renderer && graph.renderer.domElement) {
+          graph.renderer.dispose();
+          if (graph.renderer.domElement.parentNode) {
+            graph.renderer.domElement.parentNode.removeChild(graph.renderer.domElement);
+          }
+        }
+        if (typeof graph._destructor === 'function') {
+          graph._destructor();
+        }
+      } catch(e) {
+        console.warn('Graph cleanup warning:', e.message);
+      }
+      graph = null;
+    }
+    if (spaceManager) {
+      spaceManager.destroy();
+      spaceManager = null;
+    }
+
+    graph = ForceGraph3D({
+      controlType: 'orbit'
+    })
+    (container);
+
+    // 子空间按 x-y 平面四象限铺开（z 全为 0，保持侧视 2D 平面图效果）：
+    //   横向(同业) +X、投资 -X、上游 +Y、下游 -Y
+    const zonePositions = {
+      pool1: { x: 290, y: 60, z: 0 },   // 同业-产品竞争
+      pool4: { x: 290, y: 200, z: 0 },  // 同业-技术合作
+      pool2: { x: 40, y: 310, z: 0 },   // 上游-潜在供应商
+      pool5: { x: 170, y: 310, z: 0 },  // 上游-供应商
+      pool3: { x: 40, y: -310, z: 0 },  // 下游-潜在客户
+      pool6: { x: 170, y: -310, z: 0 }, // 下游-客户
+      pool7: { x: -290, y: 60, z: 0 },  // 投资-股东
+      pool8: { x: -290, y: 200, z: 0 }  // 投资-被投资企业
+    };
+
+    const zoneCounts = {};
+    Object.keys(zonePositions).forEach(k => zoneCounts[k] = 0);
+
+    // 穿透层级：level0=中心；level1=分空间布局；level>=2 同心环布局
+    const LEVEL_RADII = { 1: 250, 2: 500, 3: 760 };
+    const maxLevel = data.nodes.reduce((m, n) => Math.max(m, (n.level || 0)), 0);
+    const nodeById = {};
+    data.nodes.forEach(n => { nodeById[n.id] = n; });
+
+    // 第一遍：中心 + level1 节点按企业池分空间定位（保持原有布局）
+    data.nodes.forEach(node => {
+      if (node.isCenter) {
+        node.x = 0; node.y = 0; node.z = 0;
+        node.fx = 0; node.fy = 0; node.fz = 0;
+        return;
+      }
+      const lv = node.level || 1;
+      if (lv > 1) return;
+      if (node.pools && node.pools.length > 0) {
+        const primaryPool = node.pools[0];
+        const base = zonePositions[primaryPool];
+        const angle = (zoneCounts[primaryPool] * 0.6);
+        const radius = 60 + zoneCounts[primaryPool] * 15;
+        node.x = base.x + Math.cos(angle) * radius * 0.4;
+        node.y = base.y + Math.sin(angle) * radius * 0.4; // 在 x-y 平面内展开
+        node.z = 0;   // 拍平 z，保持侧视 2D 平面图效果
+        zoneCounts[primaryPool]++;
+      } else {
+        node.x = (Math.random() - 0.5) * 200;
+        node.y = (Math.random() - 0.5) * 200;
+        node.z = 0;
+      }
+    });
+
+    // 第二遍：level>=2 节点围绕其父节点方向，在对应层级半径的环上分布
+    data.nodes.forEach(node => {
+      if (node.isCenter) return;
+      const lv = node.level || 1;
+      if (lv <= 1) return;
+      const parent = nodeById[node.parent];
+      let baseAngle;
+      if (parent && !parent.isCenter) {
+        baseAngle = Math.atan2(parent.z, parent.x);
+      } else {
+        baseAngle = Math.random() * Math.PI * 2;
+      }
+      const angle = baseAngle + (Math.random() - 0.5) * 0.6;
+      const R = LEVEL_RADII[lv] || LEVEL_RADII[2];
+      node.x = Math.cos(angle) * R;
+      node.y = Math.sin(angle) * R;
+      // 完全拍平 z，保持侧视 2D 平面图效果
+      node.z = 0;
+    });
+
+    const pairLinkInfo = {};
+    data.links.forEach(link => {
+      const sid = typeof link.source === 'object' ? link.source.id : link.source;
+      const tid = typeof link.target === 'object' ? link.target.id : link.target;
+      const key = [sid, tid].sort().join('|');
+      if (!pairLinkInfo[key]) pairLinkInfo[key] = { count: 0 };
+      pairLinkInfo[key].count++;
+    });
+
+    const pairSeen = {};
+    data.links.forEach(link => {
+      const sid = typeof link.source === 'object' ? link.source.id : link.source;
+      const tid = typeof link.target === 'object' ? link.target.id : link.target;
+      const key = [sid, tid].sort().join('|');
+      if (!pairSeen[key]) pairSeen[key] = 0;
+      link._offsetIndex = pairSeen[key]++;
+      link._totalForPair = pairLinkInfo[key].count;
+      link._isMulti = pairLinkInfo[key].count > 1;
+      link._curveRotation = (link._offsetIndex * Math.PI) / Math.max(1, link._totalForPair);
+      const centerIdx = (link._totalForPair - 1) / 2;
+      const spread = Math.max(1, (link._totalForPair - 1) / 2);
+      link._curveValue = ((link._offsetIndex - centerIdx) / spread);
+    });
+
+    graph.d3Force('link').distance(l => {
+      // 同层距离适度；跨层距离小（连线拉力弱，由 ring 引力决定外展），避免把下层节点拉回内圈
+      return (l.source.level === undefined || l.target.level === undefined) ? 350
+        : (Math.abs(l.source.level - l.target.level) === 0 ? 300 : 120);
+    }).strength(l => {
+      // 同层连线强、跨层连线弱：跨层方向由 ring 引力保证向外
+      if (l.source.level === undefined || l.target.level === undefined) return 0.2;
+      return Math.abs(l.source.level - l.target.level) === 0 ? 0.35 : 0.06;
+    });
+    graph.d3Force('charge').strength(-150);
+    graph.d3Force('center').strength(0.05);
+
+    // 多层穿透时：把层级>1的节点拉向各自的环半径，保持同心层结构
+    graph.d3Force('ring-gravity', (function() {
+      const RADII = LEVEL_RADII;
+      return function(alpha) {
+        if (alpha < 0.02) return;
+        graph.graphData().nodes.forEach(n => {
+          if (n.isCenter) return;
+          const lv = n.level || 1;
+          if (lv <= 1) return;               // 仅约束 level>=2 的节点
+          const R = RADII[lv] || RADII[2];
+          const r = Math.sqrt(n.x * n.x + n.y * n.y);
+          const dr = R - r;
+          if (Math.abs(dr) > 1) {
+            const f = 0.12 * alpha;
+            if (r > 0.001) {
+              n.vx += (n.x / r) * dr * f;
+              n.vy += (n.y / r) * dr * f;
+            } else {
+              n.vx += (Math.random() - 0.5) * f;
+              n.vy += (Math.random() - 0.5) * f;
+            }
+          }
+          // 轻微拉回 z=0 平面，维持 2D 平面图效果
+          if (Math.abs(n.z) > 1) {
+            const zf = 0.06 * alpha;
+            n.vz += (0 - n.z) * zf;
+          }
+        });
+      };
+    })());
+
+    graph.d3Force('space-gravity', (function() {
+      return function(alpha) {
+        if (alpha < 0.01) return;
+        const groups = {};
+        graph.graphData().nodes.forEach(n => {
+          if (n.isCenter || (n.level || 1) > 1) return;   // 只对 level1 节点做子空间聚类
+          if (!n.pools || n.pools.length === 0) return;
+          const space = SPACE_MAPPING[n.pools[0]];
+          if (!space) return;
+          if (!groups[space]) groups[space] = [];
+          groups[space].push(n);
+        });
+        Object.keys(groups).forEach(space => {
+          const nodes = groups[space];
+          if (nodes.length < 2) return;
+          let cx = 0, cy = 0, cz = 0;
+          nodes.forEach(n => { cx += n.x; cy += n.y; cz += n.z; });
+          cx /= nodes.length; cy /= nodes.length; cz /= nodes.length;
+          nodes.forEach(n => {
+            if (n.isCenter) return;
+            const dx = cx - n.x, dy = cy - n.y, dz = cz - n.z;
+            const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+            if (dist > 1) {
+              const force = 0.02 * alpha;
+              n.vx += dx * force;
+              n.vy += dy * force;
+              n.vz += dz * force;
+            }
+          });
+        });
+      };
+    })());
+
+    graph.backgroundColor('#f5f3ff');
+
+    graph.nodeLabel(node => {
+      if (!node) return '';
+      if (node.isCenter) {
+        return `<div style="font-weight:600;color:#8b5cf6;font-size:13px;">${node.label}</div>`;
+      }
+      const rels = (node.pools || []).map(p => POOL_LABELS[p]).join(', ');
+      const cross = node.crossIcon && node.crossNote
+        ? `<br><span style="color:#8b5cf6;">${node.crossIcon} ${node.crossNote}</span>`
+        : '';
+      return `<div style="font-size:12px;color:#333;">${node.label}<br><span style="color:#888;">${rels}</span>${cross}</div>`;
+    });
+
+    graph.nodeColor(node => node.color);
+    graph.nodeVal(node => node.size);
+    graph.nodeOpacity(0.9);
+
+    graph.linkColor(l => l.color);
+    graph.linkOpacity(0.85);
+    graph.linkWidth(l => l.poolKey === 'pool5' || l.poolKey === 'pool6' ? 3 : 2);
+    graph.linkLabel(l => `${POOL_LABELS[l.poolKey] || ''}`);
+
+    graph.linkCurvature(l => {
+      if (!l._isMulti || !l._totalForPair || l._totalForPair < 2) return 0;
+      // 弧线曲率：两条各弯曲 0.18，三条以上按条数略微加大
+      const factor = l._totalForPair <= 2 ? 0.18 : 0.18 + (l._totalForPair - 2) * 0.08;
+      return (l._curveValue || 0) * Math.min(0.35, factor);
+    });
+    graph.linkCurveRotation(l => l._curveRotation || 0);
+
+    // 多重关系时加上方向箭头，让多条线 unmistakably 分开
+    graph.linkDirectionalArrowLength(l => l._isMulti ? 8 : 0);
+    graph.linkDirectionalArrowColor(l => l.color);
+    graph.linkDirectionalArrowRelPos(0.95);
+
+    // 给多重关系线加上运动粒子，颜色对应关系类型
+    graph.linkDirectionalParticles(l => l._isMulti ? 4 : 0);
+    graph.linkDirectionalParticleSpeed(l => l._isMulti ? 0.008 : 0);
+    graph.linkDirectionalParticleWidth(l => l._isMulti ? 4 : 0);
+    graph.linkDirectionalParticleColor(l => l.color);
+
+    let showLabels = true;
+    graph.nodeThreeObject(node => createNodeObject(node, showLabels));
+
+    graph.onNodeClick(node => {
+      if (node && !node.isCenter) {
+        const pools = node.pools || [];
+        const relations = pools.map(p =>
+          `<div><span style="color:${POOL_COLORS[p]}">●</span> ${POOL_RELATIONS[p]} - ${POOL_LABELS[p]}</div>`
+        ).join('');
+        showTooltip(node, relations);
+      }
+    });
+
+    graph.onNodeHover(node => {
+      if (!node) hideTooltip();
+    });
+
+    graph.width(() => container.clientWidth);
+    graph.height(() => container.clientHeight);
+
+    graph.graphData(data);
+    graph(container);
+
+    setTimeout(() => {
+      graph.cameraPosition({ x: 0, y: 0, z: 2200 });  // 侧视 x-y 平面，呈现 2D 平面图效果
+      spaceManager = new SpaceManager(graph, data);
+      spaceManager.init();
+      window.__graph = graph;
+      window.__spaceManager = spaceManager;
+      // 保存节点默认位置，供"恢复"按钮使用
+      window.__defaultPositions = data.nodes.map(n => ({
+        id: n.id, x: n.x, y: n.y, z: n.z
+      }));
+      // 移除 three.js OrbitControls 默认显示的操作提示文本
+      const removeOrbitHint = () => {
+        const c = $('graphContainer');
+        if (!c) return;
+        const walker = document.createTreeWalker(c, NodeFilter.SHOW_ELEMENT);
+        let node;
+        while ((node = walker.nextNode())) {
+          if (node.textContent && node.textContent.indexOf('Left-click') >= 0 &&
+              node.textContent.indexOf('rotate') >= 0 && node.children.length === 0) {
+            node.style.display = 'none';
+            break;
+          }
+        }
+      };
+      removeOrbitHint();
+      // 延迟再执行一次，防止控件异步添加
+      setTimeout(removeOrbitHint, 500);
+      setTimeout(removeOrbitHint, 1500);
+    }, 500);
+
+    const labelToggle = $('toggleNodeLabels');
+    if (labelToggle) {
+      labelToggle.onchange = function() {
+        showLabels = this.checked;
+        graph.nodeThreeObject(node => createNodeObject(node, showLabels));
+      };
+    }
+
+    // 恢复按钮：将所有节点还原到默认布局位置
+    const restoreBtn = $('restoreBtn');
+    if (restoreBtn) {
+      restoreBtn.addEventListener('click', () => {
+        const defaults = window.__defaultPositions;
+        const current = graph.graphData();
+        if (!defaults || !current || !current.nodes) return;
+        const idMap = {};
+        current.nodes.forEach(n => { idMap[n.id] = n; });
+        defaults.forEach(d => {
+          const n = idMap[d.id];
+          if (!n) return;
+          n.x = d.x; n.y = d.y; n.z = d.z;
+          n.fx = d.x; n.fy = d.y; n.fz = d.z;
+        });
+        // 下一帧解除 fx/fy/fz 锁定，让引擎重新接管布局
+        requestAnimationFrame(() => {
+          defaults.forEach(d => {
+            const n = idMap[d.id];
+            if (!n || n.isCenter) return;   // 中心企业保持锁定
+            n.fx = null; n.fy = null; n.fz = null;
+          });
+          graph.graphData({ nodes: current.nodes, links: current.links });
+        });
+      });
+    }
+
+    // 全屏按钮：切换隐藏页眉、交叉分析卡片、显示控制卡片、穿透层级卡片、关系图例卡片
+    const fullscreenBtn = $('fullscreenBtn');
+    const appEl = $('app');
+    if (fullscreenBtn && appEl) {
+      fullscreenBtn.addEventListener('click', () => {
+        const isFs = appEl.classList.toggle('fullscreen');
+        fullscreenBtn.innerHTML = isFs ? '⤡ 退出全屏' : '⤢ 全屏';
+        // 重新计算图谱尺寸，防止卡片隐藏后画布未自适应
+        setTimeout(() => {
+          if (graph) {
+            graph.width(container.clientWidth);
+            graph.height(container.clientHeight);
+          }
+        }, 250);
+      });
+    }
+
+    window.onresize = () => {
+      if (graph) {
+        graph.width(container.clientWidth);
+        graph.height(container.clientHeight);
+      }
+    };
+  }
+
+  function createNodeObject(node, showLabel) {
+    const group = new THREE.Group();
+
+    const color = new THREE.Color(node.color);
+    const baseSize = node.isCenter ? 40 : 20;
+
+    const geometry = new THREE.SphereGeometry(baseSize, 32, 32);
+    const material = new THREE.MeshPhongMaterial({
+      color: color,
+      transparent: true,
+      opacity: 0.9,
+      shininess: 100,
+      emissive: color,
+      emissiveIntensity: 0.3
+    });
+    const sphere = new THREE.Mesh(geometry, material);
+    group.add(sphere);
+
+    // 交叉分析命中的节点：在圆球正面叠加配置的图标
+    if (node.crossIcon && !node.isCenter) {
+      const iconSprite = makeTextSprite(node.crossIcon, {
+        fontColor: { r: 255, g: 255, b: 255, a: 1 },
+        backgroundColor: null,
+        padding: 0,
+        fontSize: baseSize * 1.1,
+        fontFace: 'Segoe UI Emoji, Apple Color Emoji, Noto Color Emoji, sans-serif'
+      });
+      iconSprite.position.set(0, 0, baseSize + 1);
+      // 拉大图标以尽可能填充圆球正面
+      const s = baseSize * 2.1;
+      const iAspect = iconSprite.userData.aspectRatio || 1;
+      iconSprite.scale.set(s * iAspect, s, 1);
+      group.add(iconSprite);
+    }
+
+    if (showLabel && node.label) {
+      const sprite = makeTextSprite(node.label, {
+        fontColor: node.isCenter ? { r: 139, g: 92, b: 246, a: 1 } : { r: 51, g: 51, b: 51, a: 0.95 },
+        backgroundColor: null,
+        padding: 2,
+        fontSize: node.isCenter ? 26 : 18
+      });
+      sprite.position.set(0, baseSize + 25, 0);
+      // 标签宽度按文字内容自适应，可大于节点圆球宽度
+      const textHeight = node.isCenter ? 30 : 22;
+      const aspect = sprite.userData.aspectRatio || 1;
+      sprite.scale.set(textHeight * aspect, textHeight, 1);
+      group.add(sprite);
+    }
+
+    return group;
+  }
+
+  class SpaceManager {
+    constructor(graph, data) {
+      this.graph = graph;
+      this.data = data;
+      this.scene = graph.scene();
+      this.spaceVisuals = {};
+      this.draggingSpace = null;
+      this.dragSpaceNodes = [];
+      this.dragOffsets = {};
+      this.container = document.getElementById('graphContainer');
+      this._destroyed = false;
+      this._buildNodeSpaceMap();
+    }
+
+    _buildNodeSpaceMap() {
+      this.nodeSpaces = {};
+      this.spaceNodes = { upstream: [], horizontal: [], downstream: [], investment: [] };
+      this.data.nodes.forEach(node => {
+        if (node.isCenter) return;
+        if ((node.level || 1) > 1) return;   // 穿透层级>1的节点不再纳入子空间
+        const pools = node.pools || [];
+        if (pools.length === 0) return;
+        const primaryPool = pools[0];
+        const space = SPACE_MAPPING[primaryPool];
+        if (space && this.spaceNodes[space]) {
+          this.spaceNodes[space].push(node);
+          this.nodeSpaces[node.id] = space;
+        }
+      });
+    }
+
+    init() {
+      this._createVisuals();
+      this._setupDrag();
+      const self = this;
+      this.graph.onEngineTick(() => self._update());
+      this._update();
+    }
+
+    _createVisuals() {
+      Object.keys(this.spaceNodes).forEach(spaceKey => {
+        const color = SPACE_COLORS[spaceKey];
+        this.spaceVisuals[spaceKey] = {
+          wireframe: null,
+          fill: null,
+          edge: null,
+          label: null,
+          radius: 100,
+          center: new THREE.Vector3(0, 0, 0)
+        };
+      });
+    }
+
+    _computeSpaceBounds(spaceKey) {
+      const nodes = this.spaceNodes[spaceKey];
+      if (!nodes || nodes.length === 0) return null;
+
+      let cx = 0, cy = 0, cz = 0;
+      nodes.forEach(n => {
+        cx += n.x; cy += n.y; cz += n.z;
+      });
+      cx /= nodes.length; cy /= nodes.length; cz /= nodes.length;
+
+      if (nodes.length === 1) {
+        return {
+          center: new THREE.Vector3(cx, cy, cz),
+          radii: [60, 45, 35],
+          axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+          count: 1
+        };
+      }
+
+      const n = nodes.length;
+      let sx = 0, sy = 0, sz = 0;
+      let sxy = 0, sxz = 0, syz = 0;
+      nodes.forEach(nd => {
+        const dx = nd.x - cx, dy = nd.y - cy, dz = nd.z - cz;
+        sx += dx * dx; sy += dy * dy; sz += dz * dz;
+        sxy += dx * dy; sxz += dx * dz; syz += dy * dz;
+      });
+
+      const cov = [
+        [sx / n, sxy / n, sxz / n],
+        [sxy / n, sy / n, syz / n],
+        [sxz / n, syz / n, sz / n]
+      ];
+
+      const { eigenvalues, eigenvectors } = this._jacobi3x3(cov);
+
+      const radii = eigenvalues.map(v => Math.sqrt(Math.max(v, 0.01)) * 2.5);
+      const minR = 55, maxR = 380;
+      radii[0] = Math.max(minR * 1.8, Math.min(maxR, radii[0]));
+      radii[1] = Math.max(minR * 1.2, Math.min(maxR * 0.85, radii[1]));
+      radii[2] = Math.max(minR * 0.8, Math.min(maxR * 0.7, radii[2]));
+
+      return {
+        center: new THREE.Vector3(cx, cy, cz),
+        radii: radii,
+        axes: eigenvectors,
+        count: nodes.length
+      };
+    }
+
+    _jacobi3x3(A) {
+      let a = [
+        [A[0][0], A[0][1], A[0][2]],
+        [A[1][0], A[1][1], A[1][2]],
+        [A[2][0], A[2][1], A[2][2]]
+      ];
+      let v = [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1]
+      ];
+
+      for (let iter = 0; iter < 20; iter++) {
+        let maxOff = 0;
+        let p = 0, q = 1;
+        for (let i = 0; i < 3; i++) {
+          for (let j = i + 1; j < 3; j++) {
+            if (Math.abs(a[i][j]) > maxOff) {
+              maxOff = Math.abs(a[i][j]);
+              p = i; q = j;
+            }
+          }
+        }
+        if (maxOff < 1e-10) break;
+
+        const theta = 0.5 * Math.atan2(2 * a[p][q], a[p][p] - a[q][q]);
+        const c = Math.cos(theta), s = Math.sin(theta);
+
+        const newA = [[0,0,0],[0,0,0],[0,0,0]];
+        for (let i = 0; i < 3; i++) {
+          for (let j = 0; j < 3; j++) newA[i][j] = a[i][j];
+        }
+
+        newA[p][p] = c*c*a[p][p] + s*s*a[q][q] + 2*c*s*a[p][q];
+        newA[q][q] = s*s*a[p][p] + c*c*a[q][q] - 2*c*s*a[p][q];
+        newA[p][q] = 0;
+        newA[q][p] = 0;
+
+        for (let i = 0; i < 3; i++) {
+          if (i !== p && i !== q) {
+            newA[i][p] = c*a[i][p] + s*a[i][q];
+            newA[p][i] = newA[i][p];
+            newA[i][q] = -s*a[i][p] + c*a[i][q];
+            newA[q][i] = newA[i][q];
+          }
+        }
+        for (let i = 0; i < 3; i++) {
+          if (i !== p && i !== q) {
+            for (let j = 0; j < 3; j++) {
+              if (j !== p && j !== q) {
+                newA[i][j] = a[i][j];
+              }
+            }
+          }
+        }
+
+        const newV = [[0,0,0],[0,0,0],[0,0,0]];
+        for (let i = 0; i < 3; i++) {
+          newV[i][p] = c*v[i][p] + s*v[i][q];
+          newV[i][q] = -s*v[i][p] + c*v[i][q];
+          for (let j = 0; j < 3; j++) {
+            if (j !== p && j !== q) newV[i][j] = v[i][j];
+          }
+        }
+
+        a = newA;
+        v = newV;
+      }
+
+      const eigenvalues = [a[0][0], a[1][1], a[2][2]];
+      const idx = [0, 1, 2].sort((i, j) => eigenvalues[j] - eigenvalues[i]);
+      const sortedValues = idx.map(i => eigenvalues[i]);
+      const sortedVectors = [
+        [v[0][idx[0]], v[1][idx[0]], v[2][idx[0]]],
+        [v[0][idx[1]], v[1][idx[1]], v[2][idx[1]]],
+        [v[0][idx[2]], v[1][idx[2]], v[2][idx[2]]]
+      ];
+
+      return { eigenvalues: sortedValues, eigenvectors: sortedVectors };
+    }
+
+    _update() {
+      if (this._destroyed) return;
+      Object.keys(this.spaceNodes).forEach(spaceKey => {
+        const bounds = this._computeSpaceBounds(spaceKey);
+        if (!bounds) {
+          this._removeVisual(spaceKey);
+          return;
+        }
+        this._ensureVisual(spaceKey, bounds);
+        this._updateVisual(spaceKey, bounds);
+      });
+    }
+
+    _ensureVisual(spaceKey, bounds) {
+      const v = this.spaceVisuals[spaceKey];
+      if (!v) return;
+      const color = SPACE_COLORS[spaceKey];
+
+      if (!v.wireframe) {
+        const geo = new THREE.SphereGeometry(1, 24, 16);
+        const mat = new THREE.MeshBasicMaterial({
+          color: color, wireframe: true, transparent: true, opacity: 0.85
+        });
+        v.wireframe = new THREE.Mesh(geo, mat);
+        this.scene.add(v.wireframe);
+
+        const fGeo = new THREE.SphereGeometry(1, 24, 16);
+        const fMat = new THREE.MeshBasicMaterial({
+          color: color, transparent: true, opacity: 0.2,
+          side: THREE.DoubleSide, depthWrite: false
+        });
+        v.fill = new THREE.Mesh(fGeo, fMat);
+        this.scene.add(v.fill);
+
+        const edges = new THREE.EdgesGeometry(new THREE.SphereGeometry(1.01, 24, 16));
+        const lineMat = new THREE.LineBasicMaterial({
+          color: color, transparent: true, opacity: 0.9
+        });
+        v.edge = new THREE.LineSegments(edges, lineMat);
+        this.scene.add(v.edge);
+      }
+    }
+
+    _updateVisual(spaceKey, bounds) {
+      const v = this.spaceVisuals[spaceKey];
+      if (!v) return;
+      if (!v.wireframe) return;
+
+      const c = bounds.center;
+      const axes = bounds.axes;
+      const radii = bounds.radii;
+
+      const rotMatrix = new THREE.Matrix3();
+      rotMatrix.set(
+        axes[0][0], axes[1][0], axes[2][0],
+        axes[0][1], axes[1][1], axes[2][1],
+        axes[0][2], axes[1][2], axes[2][2]
+      );
+      const quat = new THREE.Quaternion().setFromRotationMatrix(rotMatrix);
+
+      v.wireframe.position.copy(c);
+      v.wireframe.quaternion.copy(quat);
+      v.wireframe.scale.set(radii[0], radii[1], radii[2]);
+
+      v.fill.position.copy(c);
+      v.fill.quaternion.copy(quat);
+      v.fill.scale.set(radii[0], radii[1], radii[2]);
+
+      if (v.edge) {
+        v.edge.position.copy(c);
+        v.edge.quaternion.copy(quat);
+        v.edge.scale.set(radii[0], radii[1], radii[2]);
+      }
+    }
+
+    _removeVisual(spaceKey) {
+      const v = this.spaceVisuals[spaceKey];
+      if (!v) return;
+      if (v.wireframe) { this.scene.remove(v.wireframe); v.wireframe = null; }
+      if (v.fill) { this.scene.remove(v.fill); v.fill = null; }
+      if (v.edge) { this.scene.remove(v.edge); v.edge = null; }
+    }
+
+    _setupDrag() {
+      const self = this;
+      const el = this.container;
+
+      const onMouseDown = (e) => {
+        if (e.button !== 0) return;
+        const node = self._getNodeAtScreen(e.clientX, e.clientY);
+        if (node) return;
+        self._tryStartSpaceDrag(e.clientX, e.clientY, e);
+      };
+
+      const onMouseMove = (e) => {
+        if (!self.draggingSpace) return;
+        e.stopPropagation();
+        self._onMouseMove(e);
+      };
+
+      const onMouseUp = (e) => {
+        if (!self.draggingSpace) return;
+        e.stopPropagation();
+        self._onMouseUp(e);
+      };
+
+      const onMouseLeave = (e) => {
+        if (!self.draggingSpace) return;
+        e.stopPropagation();
+        self._onMouseUp(e);
+      };
+
+      const onTouchStart = (e) => {
+        if (e.touches.length !== 1) return;
+        const t = e.touches[0];
+        const node = self._getNodeAtScreen(t.clientX, t.clientY);
+        if (node) return;
+        const handled = self._tryStartSpaceDrag(t.clientX, t.clientY, e);
+        if (handled) {
+          e.preventDefault();
+        }
+      };
+
+      const onTouchMove = (e) => {
+        if (!self.draggingSpace || e.touches.length !== 1) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const t = e.touches[0];
+        self._onMouseMove({ clientX: t.clientX, clientY: t.clientY });
+      };
+
+      const onTouchEnd = (e) => {
+        if (!self.draggingSpace) return;
+        e.preventDefault();
+        e.stopPropagation();
+        self._onMouseUp({});
+      };
+
+      el.addEventListener('mousedown', onMouseDown, true);
+      document.addEventListener('mousemove', onMouseMove, true);
+      document.addEventListener('mouseup', onMouseUp, true);
+      document.addEventListener('mouseleave', onMouseLeave, true);
+      el.addEventListener('touchstart', onTouchStart, { passive: false, capture: true });
+      document.addEventListener('touchmove', onTouchMove, { passive: false, capture: true });
+      document.addEventListener('touchend', onTouchEnd, { passive: false, capture: true });
+
+      this._cleanupListeners = () => {
+        el.removeEventListener('mousedown', onMouseDown, true);
+        document.removeEventListener('mousemove', onMouseMove, true);
+        document.removeEventListener('mouseup', onMouseUp, true);
+        document.removeEventListener('mouseleave', onMouseLeave, true);
+        el.removeEventListener('touchstart', onTouchStart, { passive: false, capture: true });
+        document.removeEventListener('touchmove', onTouchMove, { passive: false, capture: true });
+        document.removeEventListener('touchend', onTouchEnd, { passive: false, capture: true });
+      };
+    }
+
+    _getNodeAtScreen(sx, sy) {
+      const rect = this.container.getBoundingClientRect();
+      if (sx < rect.left || sx > rect.right || sy < rect.top || sy > rect.bottom) return null;
+      const mx = sx - rect.left;
+      const my = sy - rect.top;
+      const nodes = this.graph.graphData().nodes;
+      const threshold = 20;
+      let closestNode = null;
+      let closestDist = Infinity;
+      nodes.forEach(n => {
+        const pos = this.graph.graph2ScreenCoords(n.x, n.y, n.z);
+        if (!pos) return;
+        const dx = pos.x - mx;
+        const dy = pos.y - my;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < threshold && dist < closestDist) {
+          closestDist = dist;
+          closestNode = n;
+        }
+      });
+      return closestNode;
+    }
+
+    _findSpaceAtScreen(sx, sy) {
+      const rect = this.container.getBoundingClientRect();
+      if (sx < rect.left || sx > rect.right || sy < rect.top || sy > rect.bottom) return null;
+
+      for (const spaceKey of Object.keys(this.spaceNodes)) {
+        const nodes = this.spaceNodes[spaceKey];
+        if (!nodes || nodes.length === 0) continue;
+
+        const cx = nodes.reduce((s, n) => s + n.x, 0) / nodes.length;
+        const cy = nodes.reduce((s, n) => s + n.y, 0) / nodes.length;
+        const cz = nodes.reduce((s, n) => s + n.z, 0) / nodes.length;
+        const center = this.graph.graph2ScreenCoords(cx, cy, cz);
+        if (!center) continue;
+
+        let screenRadius = 0;
+        nodes.forEach(n => {
+          const sp = this.graph.graph2ScreenCoords(n.x, n.y, n.z);
+          if (!sp) return;
+          const d = Math.sqrt((sp.x - center.x) ** 2 + (sp.y - center.y) ** 2);
+          if (d > screenRadius) screenRadius = d;
+        });
+
+        screenRadius = Math.max(screenRadius, 40);
+
+        const dx = sx - center.x;
+        const dy = sy - center.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < screenRadius * 1.25) {
+          return { spaceKey, screenCenter: center, screenRadius };
+        }
+      }
+      return null;
+    }
+
+    _computeGraphInputZ(node) {
+      const screenPos = this.graph.graph2ScreenCoords(node.x, node.y, node.z);
+      if (!screenPos) return 1300;
+
+      let lo = 0, hi = 3000;
+      for (let i = 0; i < 15; i++) {
+        const mid = (lo + hi) / 2;
+        const p = this.graph.screen2GraphCoords(screenPos.x, screenPos.y, mid);
+        if (p.z > node.z) {
+          lo = mid;
+        } else {
+          hi = mid;
+        }
+      }
+      return (lo + hi) / 2;
+    }
+
+    _tryStartSpaceDrag(clientX, clientY, originalEvent) {
+      const result = this._findSpaceAtScreen(clientX, clientY);
+      if (!result) return false;
+
+      if (originalEvent && originalEvent.stopPropagation) {
+        originalEvent.stopPropagation();
+        originalEvent.stopImmediatePropagation();
+      }
+
+      const { spaceKey } = result;
+
+      this.draggingSpace = spaceKey;
+      this.dragStartScreenX = clientX;
+      this.dragStartScreenY = clientY;
+      this.dragSpaceNodes = this.spaceNodes[spaceKey].filter(n => !n.isCenter);
+
+      this.dragOffsets = {};
+      this.dragNodeInputZ = {};
+      this.dragNodesStartScreen = {};
+      this.dragSpaceNodes.forEach(n => {
+        this.dragOffsets[n.id] = { x: n.x, y: n.y, z: n.z };
+        this.dragNodeInputZ[n.id] = this._computeGraphInputZ(n);
+        const sp = this.graph.graph2ScreenCoords(n.x, n.y, n.z);
+        if (sp) {
+          this.dragNodesStartScreen[n.id] = { x: sp.x, y: sp.y };
+        }
+      });
+
+      if (this.graph.d3ReheatSimulation) {
+        this.graph.d3ReheatSimulation();
+      }
+
+      return true;
+    }
+
+    _onMouseMove(e) {
+      if (!this.draggingSpace) return;
+
+      const screenDelta = {
+        x: e.clientX - this.dragStartScreenX,
+        y: e.clientY - this.dragStartScreenY
+      };
+
+      this.dragSpaceNodes.forEach(n => {
+        const inputZ = this.dragNodeInputZ[n.id];
+        const startScreen = this.dragNodesStartScreen[n.id];
+        if (inputZ == null || !startScreen) return;
+
+        const newScreenX = startScreen.x + screenDelta.x;
+        const newScreenY = startScreen.y + screenDelta.y;
+        const newGraphPos = this.graph.screen2GraphCoords(newScreenX, newScreenY, inputZ);
+
+        const off = this.dragOffsets[n.id];
+        n.fx = off.x + (newGraphPos.x - n.x);
+        n.fy = off.y + (newGraphPos.y - n.y);
+        n.fz = off.z + (newGraphPos.z - n.z);
+      });
+
+      if (this.graph.d3ReheatSimulation) {
+        this.graph.d3ReheatSimulation();
+      }
+    }
+
+    _onMouseUp(e) {
+      if (!this.draggingSpace) return;
+
+      this.dragSpaceNodes.forEach(n => {
+        n.vx = 0;
+        n.vy = 0;
+        n.vz = 0;
+        n.fx = null;
+        n.fy = null;
+        n.fz = null;
+      });
+
+      if (this.graph.d3ReheatSimulation) {
+        this.graph.d3ReheatSimulation();
+      }
+
+      this.draggingSpace = null;
+      this.dragStartScreenX = null;
+      this.dragStartScreenY = null;
+      this.dragSpaceNodes = [];
+      this.dragOffsets = {};
+      this.dragNodeInputZ = {};
+      this.dragNodesStartScreen = {};
+    }
+
+    destroy() {
+      this._destroyed = true;
+      Object.keys(this.spaceVisuals).forEach(k => this._removeVisual(k));
+      this.spaceVisuals = {};
+      if (this._cleanupListeners) this._cleanupListeners();
+    }
+  }
+
+  function showTooltip(node, relations) {
+    const tt = $('tooltip');
+    const pos = graph.graph2ScreenCoords(node.x, node.y, node.z);
+    if (!pos) return;
+    tt.innerHTML = `<div class="tt-title">${node.label}</div><div class="tt-rel">${relations}</div>`;
+    tt.style.left = (pos.x + 15) + 'px';
+    tt.style.top = (pos.y - 10) + 'px';
+    tt.style.display = 'block';
+  }
+
+  function hideTooltip() {
+    $('tooltip').style.display = 'none';
+  }
+
+  function makeTextSprite(message, opts) {
+    if (!message) message = '';
+    
+    const parameters = Object.assign({
+      fontColor: { r: 255, g: 255, b: 255, a: 1.0 },
+      backgroundColor: null,
+      fontFace: 'Arial',
+      fontSize: 48,
+      padding: 16
+    }, opts || {});
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    ctx.font = `${parameters.fontSize}px ${parameters.fontFace}`;
+    const metrics = ctx.measureText(message);
+    const textWidth = metrics.width;
+
+    const frameWidth = Math.ceil(textWidth + parameters.padding * 2);
+    const frameHeight = Math.ceil(parameters.fontSize + parameters.padding * 2);
+
+    const scale = 2;
+    canvas.width = Math.max(1, frameWidth * scale);
+    canvas.height = Math.max(1, frameHeight * scale);
+
+    const ctx2 = canvas.getContext('2d');
+    ctx2.scale(scale, scale);
+    ctx2.font = `${parameters.fontSize}px ${parameters.fontFace}`;
+    
+    if (parameters.backgroundColor) {
+      ctx2.fillStyle = parameters.backgroundColor;
+      ctx2.beginPath();
+      const r = 8;
+      const w = frameWidth, h = frameHeight;
+      ctx2.moveTo(r, 0);
+      ctx2.lineTo(w - r, 0);
+      ctx2.quadraticCurveTo(w, 0, w, r);
+      ctx2.lineTo(w, h - r);
+      ctx2.quadraticCurveTo(w, h, w - r, h);
+      ctx2.lineTo(r, h);
+      ctx2.quadraticCurveTo(0, h, 0, h - r);
+      ctx2.lineTo(0, r);
+      ctx2.quadraticCurveTo(0, 0, r, 0);
+      ctx2.closePath();
+      ctx2.fill();
+    }
+
+    ctx2.fillStyle = `rgba(${parameters.fontColor.r},${parameters.fontColor.g},${parameters.fontColor.b},${parameters.fontColor.a})`;
+    ctx2.textBaseline = 'middle';
+    ctx2.textAlign = 'left';
+    ctx2.fillText(message, parameters.padding, frameHeight / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+
+    const spriteMaterial = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false
+    });
+    
+    const sprite = new THREE.Sprite(spriteMaterial);
+    sprite.renderOrder = 999;
+    sprite.userData.aspectRatio = frameWidth / frameHeight;
+
+    return sprite;
+  }
+
+  // Expose functions needed by HTML onclick handlers
+  window.downloadTemplate = downloadTemplate;
+  window.resetFileUpload = resetFileUpload;
+
+  // 初始化交叉分析配置面板
+  if (document.getElementById('crossPanel')) {
+    initCrossPanel();
+  }
+})();
+</script>
+</body>
+</html>

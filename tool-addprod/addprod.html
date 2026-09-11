@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>产品补充</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; min-height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    color: #1a1a2e; background: #f5f3ff;
+  }
+  #header {
+    height: 56px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(245,243,255,0.9));
+    border-bottom: 1px solid rgba(139,92,246,0.15);
+    display: flex; align-items: center; padding: 0 32px; gap: 20px;
+    backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 10;
+  }
+  #header .brand {
+    font-size: 16px; font-weight: 600; letter-spacing: 1px;
+    background: linear-gradient(90deg, #8b5cf6, #c084fc);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  #header .breadcrumb { font-size: 13px; color: #888; }
+  #header .breadcrumb a { color: #8b5cf6; text-decoration: none; }
+  #header .breadcrumb a:hover { text-decoration: underline; }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 32px 24px 64px; }
+  .card {
+    background: #fff; border: 1px solid rgba(139,92,246,0.18); border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(139,92,246,0.08); padding: 24px 28px;
+  }
+  .card h2 { font-size: 18px; margin-bottom: 6px; }
+  .card .desc { font-size: 13px; color: #888; margin-bottom: 18px; line-height: 1.6; }
+
+  .form-line { display: flex; gap: 12px; align-items: stretch; }
+  .form-line input {
+    flex: 1; padding: 10px 14px; border: 1px solid rgba(139,92,246,0.25); border-radius: 8px;
+    font-size: 14px; font-family: inherit; color: #1a1a2e; outline: none; transition: all .2s;
+  }
+  .form-line input:focus { border-color: #8b5cf6; box-shadow: 0 0 0 3px rgba(139,92,246,0.1); }
+  .btn-primary {
+    padding: 10px 22px; border: none; border-radius: 8px;
+    background: linear-gradient(135deg, #8b5cf6, #c084fc); color: #fff; font-size: 15px;
+    font-weight: 600; cursor: pointer; font-family: inherit; transition: all .2s; white-space: nowrap;
+  }
+  .btn-primary:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(139,92,246,0.35); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+
+  .hint { font-size: 12px; color: #aaa; margin-top: 10px; }
+
+  /* 结果区 */
+  .res-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
+  .res-head .title { font-size: 15px; font-weight: 700; }
+  .res-head .badge { font-size: 12px; padding: 3px 10px; border-radius: 20px; font-weight: 600; display: inline-block; }
+  .badge.exists { background: #e6f4ea; color: #188038; }
+  .badge.synonym { background: #eef3ff; color: #2f54eb; }
+  .badge.add { background: #fff7e6; color: #d46b08; }
+  .badge.uncertain { background: #fff1f0; color: #cf1322; }
+  .conclusion { font-size: 13px; color: #555; line-height: 1.7; margin-bottom: 14px;
+    background: #f6f5ff; border: 1px solid rgba(139,92,246,0.12); border-radius: 8px; padding: 12px 14px; }
+  .notes { font-size: 12px; color: #b45309; margin-bottom: 12px; line-height: 1.6; }
+  .notes b { color: #92400e; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid #eee2ff; padding: 8px 10px; text-align: left; }
+  th { background: #f7f2ff; color: #6b46c1; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #faf8ff; }
+  .btn-archive {
+    margin-top: 16px; padding: 9px 20px; border: none; border-radius: 8px;
+    background: linear-gradient(135deg, #16a34a, #22c55e); color: #fff; font-size: 14px;
+    font-weight: 600; cursor: pointer; font-family: inherit; transition: all .2s;
+  }
+  .btn-archive:hover:not(:disabled) { box-shadow: 0 6px 18px rgba(22,163,74,0.35); transform: translateY(-1px); }
+  .btn-archive:disabled { opacity: .55; cursor: not-allowed; }
+  .archive-info { font-size: 12px; color: #22a06b; margin-top: 10px; line-height: 1.7; }
+
+  #error { display: none; margin: 16px 0; background: #fff1f0; border: 1px solid #ffa39e;
+    color: #cf1322; border-radius: 8px; padding: 12px 14px; font-size: 13px; line-height: 1.6; word-break: break-all; }
+  #error.show { display: block; }
+
+  /* 加载遮罩 */
+  #loading { display: none; position: fixed; inset: 0; background: rgba(245,243,255,0.72);
+    backdrop-filter: blur(3px); z-index: 20; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
+  #loading.show { display: flex; }
+  .spinner { width: 46px; height: 46px; border: 4px solid rgba(139,92,246,0.2); border-top-color: #8b5cf6;
+    border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading .txt { color: #6b46c1; font-size: 14px; font-weight: 500; }
+
+  /* 知识库展示区 */
+  #kbCard { margin-top: 24px; }
+  .kb-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 12px; }
+  .kb-left { display: flex; align-items: center; gap: 10px; }
+  .kb-title { font-size: 16px; font-weight: 700; }
+  .kb-meta { font-size: 12px; color: #888; }
+  .kb-tools { display: flex; gap: 8px; align-items: center; }
+  .kb-tools input { padding: 7px 12px; border: 1px solid rgba(139,92,246,0.25); border-radius: 8px; font-size: 13px; outline: none; width: 180px; }
+  .btn-small { padding: 7px 14px; border: 1px solid rgba(139,92,246,0.3); border-radius: 8px; background: #fff;
+    color: #6b46c1; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all .2s; }
+  a.btn-small { text-decoration: none; display: inline-block; }
+  .btn-small:hover { background: #f7f2ff; }
+  .btn-small:disabled { opacity: .5; cursor: not-allowed; }
+  .kb-tab { padding: 4px 2px 6px; border: none; border-bottom: 2px solid transparent; background: none;
+    color: #1a1a2e; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all .2s; }
+  .kb-tab:hover { color: #6b46c1; }
+  .kb-tab.active { color: #8b5cf6; border-bottom-color: #8b5cf6; }
+  .kb-sheet-sep { width: 1px; height: 20px; background: rgba(139,92,246,0.2); margin: 0 2px; }
+  .kb-table-wrap { max-height: 560px; overflow: auto; border: 1px solid #eee2ff; border-radius: 8px; }
+  .kb-pager { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; font-size: 13px; color: #666; }
+  .kb-pager b { color: #6b46c1; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="brand">产业链平台</div>
+  <div class="breadcrumb"><a href="../index.html">← 回到工具台</a> / 产品补充</div>
+</div>
+
+<main>
+  <!-- 产品词输入 -->
+  <div class="card">
+    <h2>产品补充</h2>
+    <div class="desc">输入一个 <b>产品词</b>，系统将判定该产品词是应作为知识库中某节点的同义词、还是新增为产品，并返回 <b>产品编号+产品名称+产品层级+产品行业大类+产品同义词</b> 数据行。</div>
+    <div class="form-line">
+      <input type="text" id="wordInput" placeholder="请输入产品词，如：盾构机" />
+      <button class="btn-primary" id="analyzeBtn">补充</button>
+    </div>
+    <div class="hint">判定需调用大模型，通常几秒完成</div>
+  </div>
+
+  <!-- 结果区 -->
+  <div class="card" id="resultCard" style="display:none; margin-top:24px;">
+    <div class="res-head">
+      <div class="title">判定结果：<span id="resWord" style="color:#8b5cf6;"></span> <span class="badge" id="resBadge"></span></div>
+    </div>
+    <div class="conclusion" id="conclusion"></div>
+    <div class="notes" id="notes" style="display:none;"><b>提示：</b><span id="notesSpan"></span></div>
+    <table id="resultTable">
+      <thead><tr>
+        <th>产品编号</th><th>产品名称</th><th>产品层级</th><th>产品行业大类</th><th>产品同义词</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <button class="btn-archive" id="archiveBtn" style="display:none;">存档确认</button>
+    <div class="archive-info" id="archiveInfo"></div>
+  </div>
+
+  <div id="error"></div>
+
+  <!-- 知识库展示区 -->
+  <div class="card" id="kbCard">
+    <div class="kb-head">
+      <div class="kb-left">
+        <div class="kb-title">产品分类知识库</div>
+        <div class="kb-meta" id="kbMeta"></div>
+      </div>
+      <div class="kb-tools">
+        <button class="kb-tab active" id="kbSheetStruct">结构化</button>
+        <button class="kb-tab" id="kbSheetLevel">层级</button>
+        <div class="kb-sheet-sep"></div>
+        <input type="text" id="kbSearch" placeholder="搜索 编号/名称/同义词" />
+        <button class="btn-small" id="kbSearchBtn">搜索</button>
+        <div class="kb-sheet-sep"></div>
+        <button class="btn-small" id="kbDownloadBtn">下载</button>
+      </div>
+    </div>
+    <div class="kb-table-wrap">
+      <table>
+        <thead><tr id="kbHeadRow">
+          <th>产品编号</th><th>产品名称</th><th>产品层级</th><th>产品行业大类</th><th>产品同义词</th>
+        </tr></thead>
+        <tbody id="kbTableBody">
+          <tr><td colspan="5" style="text-align:center;color:#aaa;">加载中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="kb-pager">
+      <span>共 <b id="kbTotal">0</b> 条 · 第 <b id="kbCur">1</b>/<b id="kbPages">1</b> 页</span>
+      <span>
+        <button class="btn-small" id="kbPrev">上一页</button>
+        <button class="btn-small" id="kbNext">下一页</button>
+      </span>
+    </div>
+  </div>
+</main>
+
+<div id="loading"><div class="spinner"></div><div class="txt">正在分析产品词…</div></div>
+
+<script>
+(function() {
+  const $ = id => document.getElementById(id);
+  const wordInput = $('wordInput'), analyzeBtn = $('analyzeBtn'), loading = $('loading');
+  const errorBox = $('error'), resultCard = $('resultCard');
+  const archiveBtn = $('archiveBtn'), archiveInfo = $('archiveInfo');
+  const badgeMap = { exists: ['已存在', 'exists'], synonym: ['作为同义词', 'synonym'], add: ['新增', 'add'], uncertain: ['无法确定', 'uncertain'] };
+
+  let lastSpec = null;
+
+  function showError(m) { errorBox.textContent = m; errorBox.classList.add('show'); }
+  function clearError() { errorBox.classList.remove('show'); errorBox.textContent = ''; }
+
+  async function analyze() {
+    const word = wordInput.value.trim();
+    if (!word) { showError('请输入产品词'); wordInput.focus(); return; }
+    clearError(); archiveInfo.textContent = ''; archiveBtn.style.display = 'none';
+    analyzeBtn.disabled = true; loading.classList.add('show');
+    try {
+      const resp = await fetch('/api/addprod', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ word })
+      });
+      const j = await resp.json();
+      if (!j.ok) throw new Error(j.error || '分析失败');
+      renderResult(word, j);
+    } catch (e) {
+      showError('生成失败：' + e.message);
+    } finally {
+      loading.classList.remove('show'); analyzeBtn.disabled = false;
+    }
+  }
+
+  function renderResult(word, j) {
+    resultCard.style.display = 'block';
+    $('resWord').textContent = word;
+    const [label, cls] = badgeMap[j.action] || [j.action, 'uncertain'];
+    const badge = $('resBadge'); badge.textContent = label; badge.className = 'badge ' + cls;
+    $('conclusion').innerHTML = esc(j.conclusion || '');
+    const notes = j.notes || [];
+    if (notes.length) { $('notes').style.display = 'block'; $('notesSpan').textContent = notes.join('；'); }
+    else $('notes').style.display = 'none';
+
+    const tbody = $('resultTable').querySelector('tbody');
+    tbody.innerHTML = (j.rows || []).map(r =>
+      '<tr>' + r.map(c => '<td>' + esc(String(c == null ? '' : c)) + '</td>').join('') + '</tr>'
+    ).join('') || '<tr><td colspan="5" style="color:#aaa;text-align:center;">无可落表数据行</td></tr>';
+
+    lastSpec = j.spec;
+    archiveBtn.style.display = (j.action === 'synonym' || j.action === 'add') && j.spec ? 'inline-block' : 'none';
+  }
+
+  async function archive() {
+    if (!lastSpec) return;
+    clearError();
+    archiveBtn.disabled = true; loading.classList.add('show');
+    try {
+      const resp = await fetch('/api/addprod/archive', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spec: lastSpec })
+      });
+      const j = await resp.json();
+      if (!j.ok) throw new Error(j.error || '存档失败');
+      archiveBtn.style.display = 'none';
+      const s = j.summary.synonyms.concat(j.summary.add);
+      const bits = s.map(x => x.code + ' ' + x.name).join('、');
+      archiveInfo.textContent = '已写入：' + bits + '（备份：' + (j.summary.backup || '-') + '）';
+      loadKB(1); // 同步回显下方知识库表格
+    } catch (e) {
+      showError('存档失败：' + e.message);
+    } finally {
+      loading.classList.remove('show'); archiveBtn.disabled = false;
+    }
+  }
+
+  // ===== 知识库分页展示（结构化 / 层级 双 sheet 切换） =====
+  const kbBody = $('kbTableBody'), kbSearch = $('kbSearch');
+  const kbHeadRow = $('kbHeadRow');
+  const KB_HEADS = {
+    struct: ['产品编号', '产品名称', '产品层级', '产品行业大类', '产品同义词'],
+    level: ['一级', '二级', '三级', '四级', '行业大类']
+  };
+  let kbState = { sheet: 'struct', page: 1, q: '' };
+
+  function setSheet(sheet) {
+    if (kbState.sheet === sheet) return;
+    kbState.sheet = sheet;
+    kbHeadRow.innerHTML = KB_HEADS[sheet].map(h => '<th>' + esc(h) + '</th>').join('');
+    kbSearch.placeholder = sheet === 'struct' ? '搜索 编号/名称/同义词' : '搜索 编号/名称/行业大类';
+    $('kbSheetStruct').classList.toggle('active', sheet === 'struct');
+    $('kbSheetLevel').classList.toggle('active', sheet === 'level');
+    loadKB(1);
+  }
+
+  async function loadKB(page) {
+    kbState.page = Math.max(1, page || kbState.page);
+    kbState.q = kbSearch.value.trim();
+    const param = `?page=${kbState.page}&size=100&q=${encodeURIComponent(kbState.q)}&sheet=${kbState.sheet}`;
+    try {
+      const resp = await fetch('/api/addprod/kb' + param);
+      const j = await resp.json();
+      if (!j.ok) throw new Error(j.error || '加载失败');
+      kbBody.innerHTML = j.rows.map(r =>
+        '<tr>' + r.map(c => '<td>' + esc(String(c == null ? '' : c)) + '</td>').join('') + '</tr>'
+      ).join('') || '<tr><td colspan="5" style="color:#aaa;text-align:center;">无数据</td></tr>';
+      const snap = j.snapshot;
+      $('kbMeta').textContent = `结构化 ${snap.structRows} 行 · 层级 ${snap.levelRows} 行 · 更新于 ${snap.modified}`;
+      $('kbTotal').textContent = j.total;
+      $('kbCur').textContent = j.page;
+      $('kbPages').textContent = Math.max(1, Math.ceil(j.total / j.size));
+      $('kbPrev').disabled = j.page <= 1;
+      $('kbNext').disabled = j.page * j.size >= j.total;
+    } catch (e) { showError('知识库加载失败：' + e.message); }
+  }
+
+  $('kbSheetStruct').addEventListener('click', () => setSheet('struct'));
+  $('kbSheetLevel').addEventListener('click', () => setSheet('level'));
+
+  $('kbSearchBtn').addEventListener('click', () => loadKB(1));
+  kbSearch.addEventListener('keydown', e => { if (e.key === 'Enter') loadKB(1); });
+
+  // 下载：点击时请求导出接口，base64 解码后保存（知识库 Excel 由 SQLite 实时生成）
+  $('kbDownloadBtn').addEventListener('click', async () => {
+    const btn = $('kbDownloadBtn');
+    clearError(); btn.disabled = true;
+    try {
+      const resp = await fetch('/api/addprod/export');
+      const j = await resp.json();
+      if (!j.ok) throw new Error(j.error || '导出失败');
+      const bin = atob(j.base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = j.filename || '产品分类知识库.xlsx';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { showError('下载失败：' + e.message); }
+    finally { btn.disabled = false; }
+  });
+  $('kbPrev').addEventListener('click', () => loadKB(kbState.page - 1));
+  $('kbNext').addEventListener('click', () => loadKB(kbState.page + 1));
+
+  analyzeBtn.addEventListener('click', analyze);
+  archiveBtn.addEventListener('click', archive);
+  wordInput.addEventListener('keydown', e => { if (e.key === 'Enter') analyze(); });
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  loadKB(1);
+})();
+</script>
+</body>
+</html>

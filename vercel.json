@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "builds": [
+    { "src": "tool-addchain/api/addchain.js", "use": "@vercel/node" },
+    { "src": "tool-addprod/api/*.js", "use": "@vercel/node" },
+    { "src": "skills/industry-chain-graph/references/*.xlsx", "use": "@vercel/static" },
+    { "src": "skills/product-taxonomy-supplement/references/*.xlsx", "use": "@vercel/static" },
+    { "src": "common/vendor/xlsx.full.min.js", "use": "@vercel/static" },
+    { "src": "**/*.html", "use": "@vercel/static" },
+    { "src": "**/*.css", "use": "@vercel/static" },
+    { "src": "common/vendor/**/*.js", "use": "@vercel/static" },
+    { "src": "**/*.{xlsx,xls,png,jpg,svg,ico,json,xlsm}", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/api/addchain", "dest": "/tool-addchain/api/addchain.js" },
+    { "src": "/api/addprod", "dest": "/tool-addprod/api/addprod.js" },
+    { "src": "/api/addprod/archive", "dest": "/tool-addprod/api/archive.js" },
+    { "src": "/api/addprod/kb", "dest": "/tool-addprod/api/kb.js" },
+    { "src": "/api/addprod/export", "dest": "/tool-addprod/api/export.js" },
+    { "src": "/(.*)", "dest": "/$1" }
+  ]
+}

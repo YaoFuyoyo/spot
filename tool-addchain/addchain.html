@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>新增产业链</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; min-height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    color: #1a1a2e;
+    background: #f5f3ff;
+  }
+  #header {
+    height: 56px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(245,243,255,0.9));
+    border-bottom: 1px solid rgba(139,92,246,0.15);
+    display: flex;
+    align-items: center;
+    padding: 0 32px;
+    gap: 20px;
+    backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  #header .brand {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    background: linear-gradient(90deg, #8b5cf6, #c084fc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  #header .breadcrumb { font-size: 13px; color: #888; }
+  #header .breadcrumb a { color: #8b5cf6; text-decoration: none; }
+  #header .breadcrumb a:hover { text-decoration: underline; }
+
+  main { max-width: 860px; margin: 40px auto; padding: 0 24px 64px; }
+  .card {
+    background: #fff;
+    border: 1px solid rgba(139,92,246,0.18);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(139,92,246,0.08);
+    padding: 28px;
+  }
+  .card h2 { font-size: 18px; margin-bottom: 6px; color: #1a1a2e; }
+  .card .desc { font-size: 13px; color: #888; margin-bottom: 20px; line-height: 1.6; }
+
+  .form-line { display: flex; gap: 14px; }
+  .form-line .form-row { flex: 1; margin-bottom: 16px; }
+  .form-row { margin-bottom: 16px; }
+  .form-row label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #444; }
+  .form-row label .opt { font-weight: 400; color: #999; }
+  .form-row input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid rgba(139,92,246,0.25);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    color: #1a1a2e;
+    outline: none;
+    transition: all .2s;
+  }
+  .form-row input:focus {
+    border-color: #8b5cf6;
+    box-shadow: 0 0 0 3px rgba(139,92,246,0.1);
+  }
+
+  .btn-primary {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #8b5cf6, #c084fc);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all .2s;
+  }
+  .btn-primary:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(139,92,246,0.35); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+
+  .hint { font-size: 12px; color: #aaa; margin-top: 12px; text-align: center; }
+
+  /* 加载遮罩 */
+  #loading {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(245,243,255,0.72);
+    backdrop-filter: blur(3px);
+    z-index: 20;
+    align-items: center; justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  #loading.show { display: flex; }
+  .spinner {
+    width: 46px; height: 46px;
+    border: 4px solid rgba(139,92,246,0.2);
+    border-top-color: #8b5cf6;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading .txt { color: #6b46c1; font-size: 14px; font-weight: 500; }
+
+  /* 结果 */
+  #result { display: none; margin-top: 24px; }
+  #result.show { display: block; }
+  .res-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .res-head .title { font-size: 16px; font-weight: 700; color: #1a1a2e; }
+  .res-head .title span { color: #8b5cf6; }
+  .btn-download {
+    padding: 9px 18px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #8b5cf6, #c084fc);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all .2s;
+  }
+  .btn-download:hover { box-shadow: 0 6px 18px rgba(139,92,246,0.35); transform: translateY(-1px); }
+
+  .meta-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+  .meta-item {
+    background: #f6f5ff;
+    border: 1px solid rgba(139,92,246,0.12);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .meta-item .k { color: #8b5cf6; font-weight: 600; margin-right: 6px; }
+  .info-block { font-size: 13px; color: #555; line-height: 1.7; }
+  .info-block h4 { font-size: 13px; color: #1a1a2e; margin-bottom: 6px; }
+
+  #error {
+    display: none;
+    margin-top: 16px;
+    background: #fff1f0;
+    border: 1px solid #ffa39e;
+    color: #cf1322;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.6;
+    word-break: break-all;
+  }
+  #error.show { display: block; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="brand">产业链平台</div>
+  <div class="breadcrumb"><a href="../index.html">← 回到工具台</a> / 新增产业链</div>
+</div>
+
+<main>
+  <div class="card">
+    <h2>新增产业链</h2>
+    <div class="desc">输入 <b>产业链名称</b>（必填）与 <b>地区</b>（选填，默认按全国范围调研），系统将调用大模型自动生成产业链全景图谱与企业概况，并产出符合配置标准的《{产业链名称}产业链.xlsx》，包含「概况」「图谱」等配置表供下载。</div>
+
+    <div class="form-line">
+      <div class="form-row">
+        <label>地区 <span class="opt">（可选，如：武汉）</span></label>
+        <input type="text" id="regInput" placeholder="选填，默认全国" />
+      </div>
+      <div class="form-row">
+        <label>产业链名称 <span class="opt">（必填，如：生猪）</span></label>
+        <input type="text" id="indInput" placeholder="请输入产业链名称" />
+      </div>
+    </div>
+
+    <button class="btn-primary" id="genBtn">✨ 生成产业链配置表</button>
+    <div class="hint">生成过程需调用大模型，约需 1~2 分钟，请耐心等待</div>
+  </div>
+
+  <div id="result" class="card">
+    <div class="res-head">
+      <div class="title">产业链配置表已生成：<span id="resName"></span></div>
+      <button class="btn-download" id="downloadBtn">⬇ 下载 Excel</button>
+    </div>
+    <div class="meta-grid" id="metaGrid"></div>
+    <div class="info-block">
+      <h4>产业链描述</h4>
+      <p id="resInfo"></p>
+    </div>
+  </div>
+
+  <div id="error"></div>
+</main>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="txt">正在生成产业链配置表，请稍候…</div>
+</div>
+
+<script>
+(function() {
+  const $ = id => document.getElementById(id);
+  const regInput = $('regInput');
+  const indInput = $('indInput');
+  const genBtn = $('genBtn');
+  const loading = $('loading');
+  const result = $('result');
+  const errorBox = $('error');
+
+  let lastFile = null;   // 缓存最近一次成功结果的下载文件，用于重复下载
+
+  function showError(msg) {
+    errorBox.textContent = msg;
+    errorBox.classList.add('show');
+  }
+  function clearError() { errorBox.classList.remove('show'); errorBox.textContent = ''; }
+
+  genBtn.addEventListener('click', async () => {
+    const industry = indInput.value.trim();
+    if (!industry) { showError('请填写产业链名称'); indInput.focus(); return; }
+    clearError();
+    genBtn.disabled = true;
+    loading.classList.add('show');
+    try {
+      const resp = await fetch('/api/addchain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ region: regInput.value.trim(), industry })
+      });
+      const j = await resp.json();
+      if (!j.ok) throw new Error(j.error || '生成失败');
+      renderResult(j.summary, j.file);
+    } catch (e) {
+      showError('生成失败：' + e.message);
+    } finally {
+      loading.classList.remove('show');
+      genBtn.disabled = false;
+    }
+  });
+
+  // ===== 结果展示与下载（Excel 由后端按 skill 模板生成，返回 base64） =====
+  function base64ToBlob(b64) {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+
+  function downloadExcel() {
+    if (!lastFile) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(base64ToBlob(lastFile.base64));
+    a.download = lastFile.name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  function renderResult(summary, file) {
+    lastFile = file;
+    $('resName').textContent = summary.chain_name || '';
+
+    const meta = [
+      ['文件名', summary.file],
+      ['产业链编号', summary.chain_code],
+      ['Sheet 清单', summary.sheets.join(' / ')],
+      ['图谱层级 / 节点数', summary.level + ' 级 / ' + summary.nodeCount + ' 个节点']
+    ];
+    $('metaGrid').innerHTML = meta.map(m =>
+      '<div class="meta-item"><span class="k">' + m[0] + '：</span>' + esc(m[1]) + '</div>').join('');
+    $('resInfo').textContent = summary.chain_info || '';
+
+    result.classList.add('show');
+  }
+
+  $('downloadBtn').addEventListener('click', () => {
+    try { downloadExcel(); }
+    catch (e) { showError('文件下载失败：' + e.message); }
+  });
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  // Enter 快速生成
+  [regInput, indInput].forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') genBtn.click(); }));
+})();
+</script>
+</body>
+</html>

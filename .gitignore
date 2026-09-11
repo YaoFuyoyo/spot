@@ -1,0 +1,12 @@
+# 环境变量（含密钥），禁止提交
+.env
+.env.local
+.env.*.local
+
+# 本地临时输出
+_io/
+node_modules/
+.DS_Store
+
+# SQLite 知识库（含自动备份快照，属运行时数据，不入库）
+data/*.sqlite
