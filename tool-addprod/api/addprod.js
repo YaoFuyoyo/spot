@@ -189,7 +189,7 @@ async function callLLM(word, ctx, feedback) {
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   let resp;
   try {
-    resp = await fetch(BASE + '/v1/chat/completions', {
+    resp = await fetch(BASE + '/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + requireKey() },
       body: JSON.stringify(payload),
