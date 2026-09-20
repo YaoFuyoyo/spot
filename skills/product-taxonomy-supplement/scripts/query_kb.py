@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""产品分类知识库查询助手（只读，【结构化】/【层级】双 sheet）。
+"""产品分类知识库查询助手（只读）。
+
+数据源：缺省连接平台 SQLite 知识库（data/addprod.sqlite，与 tool-addprod 平台同源、
+随存档实时更新）；--kb 可显式指定 SQLite 库或 xlsx 快照（离线场景）。
 
 用法:
   python query_kb.py info                              知识库快照（路径/行数/排序校验）
@@ -14,11 +17,11 @@
   python query_kb.py l1                                列出全部一级节点
 
 选项:
-  --kb PATH              知识库路径（默认 <skill>/references/产品分类知识库.xlsx）
+  --kb PATH              数据源路径（缺省 平台 SQLite；.xlsx 后缀时按 xlsx 快照读取）
   --limit N              输出条数上限（默认 30）
-  --sheet-struct NAME    【结构化】sheet 名（默认 结构化）
-  --sheet-level NAME     【层级】sheet 名（默认 层级）
-  --ignore-header        跳过表头校验
+  --sheet-struct NAME    【结构化】sheet 名（仅 xlsx 生效，默认 结构化）
+  --sheet-level NAME     【层级】sheet 名（仅 xlsx 生效，默认 层级）
+  --ignore-header        跳过表头校验（仅 xlsx 生效）
   --json                 以 JSON 输出（便于其他程序消费）
 
 退出码: 0 成功 / 1 用法或 IO 错误 / 2 缺少依赖 / 3 结构不符
@@ -41,21 +44,6 @@ REPLACE_GROUPS = {
     "元件类": ["元件", "器件", "元器件"],
     "连接词": ["和", "与", "及"],
 }
-
-
-def load_rows(ws):
-    rows = []
-    for r in ws.iter_rows(min_row=2, values_only=True):
-        if r is None or r[0] is None:
-            continue
-        rows.append({
-            "code": str(r[0]).strip(),
-            "name": (str(r[1]).strip() if r[1] is not None else ""),
-            "level": int(r[2]) if r[2] is not None else None,
-            "industry": (str(r[3]).strip() if r[3] is not None else ""),
-            "syn": (str(r[4]).strip() if r[4] is not None else ""),
-        })
-    return rows
 
 
 def syn_list(row):
@@ -82,23 +70,24 @@ def emit(rows, args, header):
 
 
 def cmd_info(args, ctx):
-    ws_s, ws_l, rows = ctx["ws_s"], ctx["ws_l"], ctx["rows"]
-    st = os.stat(ctx["path"])
+    rows, path, kind = ctx["rows"], ctx["path"], ctx["kind"]
+    st = os.stat(path)
     codes = [K.int_code(r["code"]) for r in rows]
     codes = [c for c in codes if c is not None]
-    l4 = [K.int_code(ws_l.cell(r, 7).value) for r in range(2, ws_l.max_row + 1)]
-    l4 = [c for c in l4 if c is not None]
+    l4 = [K.int_code(r["code"]) for r in rows if r["level"] == 4]
     info = {
-        "kb_path": ctx["path"],
+        "kb_path": path,
+        "kind": kind,
         "size_mb": round(st.st_size / 1048576, 2),
         "modified": __import__("datetime").datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
-        "sheets": ctx["wb"].sheetnames,
         "struct_rows": len(rows),
         "level_rows": len(l4),
         "struct_sorted_asc": all(codes[i] < codes[i + 1] for i in range(len(codes) - 1)),
         "level_sorted_asc": all(l4[i] < l4[i + 1] for i in range(len(l4) - 1)),
         "level1_count": sum(1 for r in rows if r["level"] == 1),
     }
+    if kind == "xlsx":
+        info["sheets"] = ctx["wb"].sheetnames if ctx.get("wb") else [K.SHEET_STRUCT, K.SHEET_LEVEL]
     if args.json:
         print(json.dumps(info, ensure_ascii=False, indent=2))
         return
@@ -140,8 +129,9 @@ def cmd_check(args, ctx):
         print(f"   ... 其余 {len(contain) - args.limit} 个")
     print("\n结论提示：")
     print("  · 1)/2)/3) 任一命中 => 强信号，应作为老词同义词，不得新增。")
-    print("  · 1)/2)/3) 均未命中 => 仍须做上下位判断（见 SKILL.md 步骤 3）：")
-    print("    若该词是库中某节点下【多个子类的统称/上位词】，同样只能作同义词，不得新增。")
+    print("  · 1)/2)/3) 均未命中 => 仍须做层级关系判断（见 SKILL.md 步骤 3）：")
+    print("    上位统称（节点下多个平级细分的共同统称）=> 作同义词；但该词包含主名时为零增益同义词，禁止，应下位细分新增。")
+    print("    下位细分/同层并列 => 新增；语义父级缺失时按「兄弟挂靠」挂语义最接近既有产品的父级，尽量不返回无法确认。")
 
 
 def cmd_find(args, ctx):
@@ -255,11 +245,9 @@ def main():
     for k, v in GLOBAL_DEFAULTS.items():
         if not hasattr(args, k):
             setattr(args, k, v)
-    wb, ws_s, ws_l = K.open_kb(
-        args.kb, data_only=True,
-        sheet_struct=args.sheet_struct, sheet_level=args.sheet_level,
-        need_level=True, check_header=not args.ignore_header)
-    ctx = {"wb": wb, "ws_s": ws_s, "ws_l": ws_l, "rows": load_rows(ws_s), "path": K.resolve_kb(args.kb)}
+    path, kind = K.resolve_source(args.kb)
+    rows = K.load_rows_any(path, kind)
+    ctx = {"rows": rows, "path": path, "kind": kind, "wb": None}
 
     {"info": cmd_info, "check": cmd_check, "find": cmd_find, "row": cmd_row, "path": cmd_path,
      "children": cmd_children, "next": cmd_next, "contains": cmd_contains, "l1": cmd_l1}[args.cmd](args, ctx)

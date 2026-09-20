@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""把产品补充结果写入知识库（【结构化】+【层级】双 sheet 同步）。
+"""把产品补充结果写入知识库。
 
-两个 sheet 均按 int(编号) 严格升序排列：
-  【结构化】按 int(产品编号)   —— 插入位置 = 首个编号大于新编号的行
-  【层级】  按 int(四级编号)   —— 插入位置 = 首个四级编号大于新编号的行
-因此必须"按编号顺序插入"，不能追加到末尾。
+数据源：缺省写平台 SQLite 知识库（data/addprod.sqlite，与 tool-addprod 平台同源，
+平台【层级】视图由 product 表实时推导，无需单独同步）；--kb 可显式指定 xlsx 快照
+（此时走旧的 openpyxl 双 sheet 写入路径，适合离线维护场景）。
 
 用法:
-  python apply_kb.py --spec spec.json [--dry-run] [--force] [--no-backup]
+  python apply_kb.py --spec spec.json [--dry-run] [--force]
   python apply_kb.py --syn 3503=工程机械 [--dry-run]
   python apply_kb.py --add "35031001|盾构机|4|C35|全断面隧道掘进机" [--dry-run]
 
@@ -22,11 +21,9 @@ spec.json 格式（推荐，中文场景优先用文件传参，避免命令行�
 }
 
 选项:
-  --kb PATH / --sheet-struct / --sheet-level / --ignore-header
+  --kb PATH / --sheet-struct / --sheet-level / --ignore-header（后三项仅 xlsx 生效）
   --dry-run       只打印计划，不写入
-  --force         跳过写入预检（知识库含公式/图表/图片时）
-  --no-backup     不生成备份
-  --backup-dir DIR 备份目录（默认与知识库同目录）
+  --force         跳过写入预检（仅 xlsx；知识库含公式/图表/图片时）
   --json          以 JSON 输出变更摘要
 
 退出码: 0 成功 / 1 用法或 IO 错误 / 2 缺少依赖 / 3 结构不符 / 4 写入预检未通过
@@ -35,7 +32,6 @@ spec.json 格式（推荐，中文场景优先用文件传参，避免命令行�
 import argparse
 import json
 import os
-import shutil
 import sys
 from datetime import datetime
 
@@ -129,6 +125,78 @@ def build_spec(args):
     return spec
 
 
+def apply_sqlite(path, spec, args, summary):
+    """SQLite 落表：product 表事务写入；【层级】视图由平台实时推导，无需同步。"""
+    import sqlite3
+    d = sqlite3.connect(path)
+    try:
+        d.execute("PRAGMA busy_timeout = 10000")
+        nodes = {}
+        for code, name, level, industry, syn in d.execute(
+                "SELECT code, name, level, industry, synonyms FROM product"):
+            nodes[str(code).strip()] = {"name": name or "", "level": int(level),
+                                        "industry": industry or "", "syn": syn or ""}
+
+        # ---------- 1) 同义词挂入（内存累积，spec 内多条同编号可串联） ----------
+        for item in spec["synonyms"]:
+            code, syn = str(item["code"]).strip(), (item.get("syn") or "").strip()
+            if code not in nodes:
+                sys.stderr.write(f"[跳过] 编号 {code} 不存在\n")
+                continue
+            nd = nodes[code]
+            cur = [s.strip() for s in (nd["syn"] or "").replace("；", ";").split(";") if s.strip()]
+            if syn in cur:
+                sys.stderr.write(f"[跳过] {code} 已含同义词「{syn}」\n")
+                continue
+            cur.append(syn)
+            new_syn = "；".join(cur)
+            nd["syn"] = new_syn
+            if not args.dry_run:
+                d.execute("UPDATE product SET synonyms = ? WHERE code = ?", (new_syn, code))
+            summary["synonyms"].append({"code": code, "name": nd["name"], "new_syn": new_syn})
+
+        # ---------- 2) 新增节点（按编码升序，校验规则与 xlsx 路径一致） ----------
+        for item in sorted(spec["add"], key=lambda x: K.int_code(str(x["code"])) or 0):
+            code = str(item["code"]).strip()
+            if code in nodes:
+                sys.stderr.write(f"[跳过] 编号 {code} 已存在：{nodes[code]['name']}\n")
+                continue
+            lvl = int(item["level"])
+            if len(code) != lvl * 2:
+                sys.stderr.write(f"[跳过] {code} 长度与层级 {lvl} 不符（应为 {lvl * 2} 位）\n")
+                continue
+            parent = code[:-2]
+            if parent and parent not in nodes:
+                sys.stderr.write(f"[跳过] {code} 的父级 {parent} 不存在\n")
+                continue
+            industry = item["industry"] or (nodes[parent]["industry"] if parent else None)
+            syn = (item.get("syn") or "").strip()
+            if not args.dry_run:
+                d.execute("INSERT INTO product (code, name, level, industry, synonyms) VALUES (?,?,?,?,?)",
+                          (code, item["name"], lvl, industry, syn or ""))
+            nodes[code] = {"name": item["name"], "level": lvl, "industry": industry, "syn": syn or ""}
+            summary["add"].append({"code": code, "name": item["name"], "level": lvl,
+                                   "industry": industry, "syn": syn or None})
+
+        if args.dry_run:
+            return
+        try:
+            d.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('updated_at', ?)",
+                      (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),))
+        except sqlite3.Error:
+            pass  # meta 表未建时忽略（与平台行为一致）
+        d.commit()
+    except Exception:
+        if not args.dry_run:
+            try:
+                d.rollback()
+            except Exception:
+                pass
+        raise
+    finally:
+        d.close()
+
+
 def main():
     ap = argparse.ArgumentParser(description="产品分类知识库落表")
     ap.add_argument("--kb", default=None)
@@ -136,9 +204,7 @@ def main():
     ap.add_argument("--syn", action="append", default=[], metavar="CODE=同义词")
     ap.add_argument("--add", action="append", default=[], metavar="CODE|NAME|LEVEL|INDUSTRY|SYN")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--force", action="store_true", help="跳过写入预检")
-    ap.add_argument("--no-backup", action="store_true")
-    ap.add_argument("--backup-dir", default=None)
+    ap.add_argument("--force", action="store_true", help="跳过写入预检（仅 xlsx）")
     ap.add_argument("--sheet-struct", default=K.SHEET_STRUCT)
     ap.add_argument("--sheet-level", default=K.SHEET_LEVEL)
     ap.add_argument("--ignore-header", action="store_true")
@@ -150,7 +216,29 @@ def main():
         sys.stderr.write("没有待写入的变更\n")
         sys.exit(K.EXIT_USAGE)
 
-    path = K.resolve_kb(args.kb)
+    path, kind = K.resolve_source(args.kb)
+
+    # ================= SQLite 路径（缺省，与平台同源） =================
+    if kind == "sqlite":
+        summary = {"synonyms": [], "add": [], "dry_run": args.dry_run}
+        apply_sqlite(path, spec, args, summary)
+        if args.json:
+            print(json.dumps(summary, ensure_ascii=False, indent=2))
+            if not args.dry_run:
+                print(json.dumps({"saved": path}, ensure_ascii=False))
+        else:
+            print("=== 落表计划 ===" if args.dry_run else "=== 已写入 ===")
+            for s in summary["synonyms"]:
+                print(f"  同义词 {s['code']} {s['name']} -> {s['new_syn']}（层级视图实时推导）")
+            for a in summary["add"]:
+                print(f"  新增 {a['code']} {a['name']} L{a['level']} {a['industry']}")
+            if args.dry_run:
+                print("\n[dry-run] 未写入任何改动。去掉 --dry-run 执行写入。")
+            else:
+                print(f"已写入：{path}（product 表，事务提交）")
+        return
+
+    # ================= xlsx 路径（--kb 显式指定快照时） =================
     if not args.dry_run:
         K.preflight_write(path, force=args.force)
 
@@ -252,23 +340,12 @@ def main():
             print("\n[dry-run] 未写入任何改动。去掉 --dry-run 执行写入。")
             return
 
-    if not args.no_backup:
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base = os.path.basename(path)
-        bak_name = f"{os.path.splitext(base)[0]}.bak_{stamp}.xlsx"
-        bak_dir = args.backup_dir or os.path.dirname(os.path.abspath(path))
-        os.makedirs(bak_dir, exist_ok=True)
-        bak = os.path.join(bak_dir, bak_name)
-        shutil.copy2(path, bak)
-        summary["backup"] = bak
-        if not args.json:
-            print(f"\n备份：{bak}")
     wb.save(path)
     summary["saved"] = path
     if not args.json:
         print(f"已保存：{path}")
     elif args.json:
-        print(json.dumps({"backup": summary.get("backup"), "saved": path}, ensure_ascii=False))
+        print(json.dumps({"saved": path}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

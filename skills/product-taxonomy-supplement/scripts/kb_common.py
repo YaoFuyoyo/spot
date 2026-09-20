@@ -11,6 +11,10 @@ import sys
 import zipfile
 
 SKILL_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(SKILL_ROOT))
+# 平台权威数据源：tool-addprod 的 SQLite 知识库（与平台共用，随存档实时更新）
+DEFAULT_DB = os.environ.get("ADDPROD_DB_PATH", "").strip() or os.path.join(PROJECT_ROOT, "data", "addprod.sqlite")
+# xlsx 快照（离线场景 / 导出模板；不再随平台更新）
 DEFAULT_KB = os.path.join(SKILL_ROOT, "references", "产品分类知识库.xlsx")
 
 SHEET_STRUCT = "结构化"
@@ -54,6 +58,68 @@ def resolve_kb(path):
         )
         sys.exit(EXIT_USAGE)
     return path
+
+
+def resolve_source(path):
+    """解析数据源：缺省连平台 SQLite（与 tool-addprod 同源）；
+    --kb 显式指定时按扩展名分流（.sqlite/.db/.sqlite3 -> sqlite，其他 -> xlsx）。
+    返回 (path, kind)，kind ∈ {"sqlite", "xlsx"}。"""
+    if not path:
+        path = DEFAULT_DB
+    if not os.path.exists(path):
+        sys.stderr.write(
+            f"知识库不存在：{path}\n"
+            f"缺省数据源为平台 SQLite：{DEFAULT_DB}\n"
+            f"也可用 --kb 显式指定 SQLite 库或 xlsx 快照（references/产品分类知识库.xlsx）。\n"
+        )
+        sys.exit(EXIT_USAGE)
+    ext = os.path.splitext(path)[1].lower()
+    return path, ("sqlite" if ext in (".sqlite", ".db", ".sqlite3") else "xlsx")
+
+
+def load_rows_any(path, kind):
+    """统一行读取：返回 [{code,name,level,industry,syn}]，按 int(编号) 升序。"""
+    if kind == "sqlite":
+        return load_rows_sqlite(path)
+    return load_rows_xlsx(resolve_kb(path))
+
+
+def load_rows_sqlite(path):
+    import sqlite3
+    d = sqlite3.connect(path)
+    try:
+        d.execute("PRAGMA query_only = ON")
+        d.execute("PRAGMA busy_timeout = 10000")
+        out = []
+        for code, name, level, industry, syn in d.execute(
+                "SELECT code, name, level, industry, synonyms FROM product "
+                "ORDER BY CAST(code AS INTEGER)"):
+            out.append({
+                "code": str(code).strip(),
+                "name": (name or "").strip(),
+                "level": int(level) if level is not None else None,
+                "industry": (industry or "").strip(),
+                "syn": (syn or "").strip(),
+            })
+        return out
+    finally:
+        d.close()
+
+
+def load_rows_xlsx(path):
+    wb, ws_s, _ = open_kb(path, data_only=True, need_level=False)
+    rows = []
+    for r in ws_s.iter_rows(min_row=2, values_only=True):
+        if r is None or r[0] is None:
+            continue
+        rows.append({
+            "code": str(r[0]).strip(),
+            "name": (str(r[1]).strip() if r[1] is not None else ""),
+            "level": int(r[2]) if r[2] is not None else None,
+            "industry": (str(r[3]).strip() if r[3] is not None else ""),
+            "syn": (str(r[4]).strip() if r[4] is not None else ""),
+        })
+    return rows
 
 
 def header_of(ws, ncol):
