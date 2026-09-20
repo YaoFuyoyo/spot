@@ -184,6 +184,7 @@ async function generateChain(region, industry) {
     model: MODEL,
     temperature: 0.3,
     response_format: { type: 'json_object' },
+    thinking: { type: 'disabled' },
     messages: [
       { role: 'system', content: buildPrompt(region, industry) },
       { role: 'user', content: userPrompt }
@@ -195,7 +196,7 @@ async function generateChain(region, industry) {
 
   let resp;
   try {
-    resp = await fetch(BASE + '/chat/completions', {
+    resp = await fetch(BASE + '/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + requireKey() },
       body: JSON.stringify(payload),
@@ -213,15 +214,24 @@ async function generateChain(region, industry) {
   }
 
   const j = await resp.json();
-  const content = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+  const msg = j && j.choices && j.choices[0] && j.choices[0].message;
+  let content = msg && (msg.content || msg.reasoning_content);
   if (!content) throw new Error('大模型未返回内容');
+  content = String(content)
+    .replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, '')
+    .replace(/<think\b[^>]*>[\s\S]*$/gi, '')
+    .replace(/```(?:json|JSON)?/g, '')
+    .replace(/```/g, '')
+    .trim();
 
   let obj;
   try {
     obj = JSON.parse(content);
   } catch (e) {
-    const m = content.replace(/```json|```/g, '').replace(/^\s*\{/, '{');
-    try { obj = JSON.parse(m); }
+    const start = content.indexOf('{');
+    const end = content.lastIndexOf('}');
+    const sliced = start >= 0 && end > start ? content.slice(start, end + 1) : content;
+    try { obj = JSON.parse(sliced); }
     catch (e2) { throw new Error('大模型返回无法解析为 JSON，请重试。原始片段：' + content.slice(0, 200)); }
   }
   obj.industry = industry;

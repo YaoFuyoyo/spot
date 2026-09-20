@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>产品上下游关系网</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; min-height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    color: #1a1a2e;
+    background: #f5f3ff;
+  }
+  #header {
+    height: 56px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(245,243,255,0.9));
+    border-bottom: 1px solid rgba(139,92,246,0.15);
+    display: flex;
+    align-items: center;
+    padding: 0 32px;
+    gap: 20px;
+    backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  #header .brand {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    background: linear-gradient(90deg, #8b5cf6, #c084fc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  #header .breadcrumb { font-size: 13px; color: #888; }
+  #header .breadcrumb a { color: #8b5cf6; text-decoration: none; }
+  #header .breadcrumb a:hover { text-decoration: underline; }
+
+  main { max-width: 860px; margin: 40px auto; padding: 0 24px 64px; }
+  .card {
+    background: #fff;
+    border: 1px solid rgba(139,92,246,0.18);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(139,92,246,0.08);
+    padding: 28px;
+  }
+  .card h2 { font-size: 18px; margin-bottom: 6px; color: #1a1a2e; }
+  .card .desc { font-size: 13px; color: #888; margin-bottom: 20px; line-height: 1.6; }
+
+  .form-row { margin-bottom: 16px; }
+  .form-row label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #444; }
+  .form-row input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid rgba(139,92,246,0.25);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    color: #1a1a2e;
+    outline: none;
+    transition: all .2s;
+  }
+  .form-row input:focus {
+    border-color: #8b5cf6;
+    box-shadow: 0 0 0 3px rgba(139,92,246,0.1);
+  }
+
+  .btn-primary {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #8b5cf6, #c084fc);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all .2s;
+  }
+  .btn-primary:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(139,92,246,0.35); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+
+  .hint { font-size: 12px; color: #aaa; margin-top: 12px; text-align: center; }
+
+  /* 加载遮罩 */
+  #loading {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(245,243,255,0.72);
+    backdrop-filter: blur(3px);
+    z-index: 20;
+    align-items: center; justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  #loading.show { display: flex; }
+  .spinner {
+    width: 46px; height: 46px;
+    border: 4px solid rgba(139,92,246,0.2);
+    border-top-color: #8b5cf6;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading .txt { color: #6b46c1; font-size: 14px; font-weight: 500; }
+
+  /* 结果 */
+  #result { display: none; margin-top: 24px; }
+  #result.show { display: block; }
+  .res-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .res-head .title { font-size: 16px; font-weight: 700; color: #1a1a2e; }
+  .res-head .title span { color: #8b5cf6; }
+  .btn-download {
+    padding: 9px 18px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #8b5cf6, #c084fc);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all .2s;
+  }
+  .btn-download:hover { box-shadow: 0 6px 18px rgba(139,92,246,0.35); transform: translateY(-1px); }
+
+  .meta-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+  .meta-item {
+    background: #f6f5ff;
+    border: 1px solid rgba(139,92,246,0.12);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .meta-item .k { color: #8b5cf6; font-weight: 600; margin-right: 6px; }
+  .info-block { font-size: 13px; color: #555; line-height: 1.7; margin-bottom: 14px; }
+  .info-block h4 { font-size: 13px; color: #1a1a2e; margin-bottom: 6px; }
+  .info-block ul { padding-left: 18px; }
+  .warn-block {
+    background: #fffbe6;
+    border: 1px solid #ffe58f;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  details { font-size: 12px; color: #888; }
+  details summary { cursor: pointer; color: #8b5cf6; }
+  details pre {
+    margin-top: 8px;
+    background: #f6f5ff;
+    border-radius: 8px;
+    padding: 10px 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 260px;
+    overflow: auto;
+    line-height: 1.6;
+  }
+
+  #error {
+    display: none;
+    margin-top: 16px;
+    background: #fff1f0;
+    border: 1px solid #ffa39e;
+    color: #cf1322;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.6;
+    word-break: break-all;
+  }
+  #error.show { display: block; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="brand">产业链平台</div>
+  <div class="breadcrumb"><a href="../index.html">← 回到工具台</a> / 产品上下游关系网</div>
+</div>
+
+<main>
+  <div class="card">
+    <h2>产品上下游关系网</h2>
+    <div class="desc">输入 <b>产品编号</b>（取自《产品分类知识库》，如 <b>3923</b>、<b>010101</b>），系统将确定该产品及其全下级子树，自动汇聚 <b>工艺常识</b>（大模型）、<b>税票商品</b>、<b>上市信息</b>、<b>舆情资讯</b>（MCP 数据接口）与 <b>产业图谱</b> 五类来源建边，产出 12 列上下游关系 Excel（关系ID / 上下游编号名称层级 / 关系类型 / 关系强度 / 建边层级 / 依据来源 / 置信度）供下载。</div>
+
+    <div class="form-row">
+      <label>产品编号 <span class="opt"></span></label>
+      <input type="text" id="prodInput" placeholder="必填，如 3817" />
+    </div>
+    <div class="form-row">
+      <label>头部企业 <span class="opt"></span></label>
+      <input type="text" id="entInput" placeholder="选填，留空则由大模型自动分析，如：宁德时代新能源科技股份有限公司" />
+    </div>
+
+    <button class="btn-primary" id="genBtn">🔗 生成上下游关系 Excel</button>
+    <div class="hint">生成过程需调用大模型、MCP 数据接口与本地生成器，约需 2~4 分钟，请耐心等待</div>
+  </div>
+
+  <div id="result" class="card">
+    <div class="res-head">
+      <div class="title">上下游关系表已生成：<span id="resName"></span></div>
+      <button class="btn-download" id="downloadBtn">⬇ 下载 Excel</button>
+    </div>
+    <div class="meta-grid" id="metaGrid"></div>
+    <div class="info-block">
+      <h4>来源采集</h4>
+      <ul id="srcList"></ul>
+    </div>
+    <div class="info-block warn-block" id="gapBlock" style="display:none">
+      <h4>取数缺口（需按 SKILL 路径 B 补数）</h4>
+      <ul id="gapList"></ul>
+    </div>
+    <div class="info-block warn-block" id="unmappedBlock" style="display:none">
+      <h4>大模型给出但未对齐到知识库的产品名（已丢弃）</h4>
+      <p id="unmappedList"></p>
+    </div>
+    <details>
+      <summary>生成器运行日志</summary>
+      <pre id="logPre"></pre>
+    </details>
+  </div>
+
+  <div id="error"></div>
+</main>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="txt" id="loadingTxt">正在生成上下游关系表，请稍候…</div>
+</div>
+
+<script>
+(function() {
+  const $ = id => document.getElementById(id);
+  const prodInput = $('prodInput');
+  const entInput = $('entInput');
+  const genBtn = $('genBtn');
+  const loading = $('loading');
+  const result = $('result');
+  const errorBox = $('error');
+
+  let lastFile = null;   // 缓存最近一次成功结果的下载文件，用于重复下载
+
+  function showError(msg) {
+    errorBox.textContent = msg;
+    errorBox.classList.add('show');
+  }
+  function clearError() { errorBox.classList.remove('show'); errorBox.textContent = ''; }
+
+  genBtn.addEventListener('click', async () => {
+    const product = prodInput.value.trim();
+    if (!product) { showError('请填写产品编号'); prodInput.focus(); return; }
+    if (!/^\d+$/.test(product)) { showError('产品编号须为数字，如 3923'); prodInput.focus(); return; }
+    clearError();
+    result.classList.remove('show');
+    genBtn.disabled = true;
+    loading.classList.add('show');
+    $('loadingTxt').textContent = `正在为产品 ${product} 生成上下游关系表，请稍候…`;
+    try {
+      const resp = await fetch('/api/updown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product, head_ent: entInput.value.trim() })
+      });
+      const j = await resp.json();
+      if (!j.ok) throw new Error(j.error || '生成失败');
+      renderResult(j.summary, j.file);
+    } catch (e) {
+      showError('生成失败：' + e.message);
+    } finally {
+      loading.classList.remove('show');
+      genBtn.disabled = false;
+    }
+  });
+
+  // ===== 结果展示与下载（Excel 由后端按 skill 生成器产出，返回 base64） =====
+  function base64ToBlob(b64) {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+
+  function downloadExcel() {
+    if (!lastFile) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(base64ToBlob(lastFile.base64));
+    a.download = lastFile.name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  function li(el, items) {
+    el.innerHTML = items.map(t => '<li>' + esc(t) + '</li>').join('');
+  }
+
+  function renderResult(s, file) {
+    lastFile = file;
+    $('resName').textContent = s.product_code + ' ' + s.product_name;
+
+    const meta = [
+      ['产品', s.product_code + ' ' + s.product_name + '（' + s.product_level + '，子树 ' + s.subtree_count + ' 个）'],
+      ['文件名', s.file],
+      ['自有边数', s.final_edges + '（合并 ' + s.unique_edges + ' − 剔除冗余继承 ' + s.removed_inherited + '）'],
+      ['排序分组', s.groups],
+      ['工艺常识边', '大模型给出 ' + s.llm_edges + ' 条，对齐入库 ' + s.aligned_edges + ' 条'],
+      ['关系类型分布', s.type_dist]
+    ];
+    if (s.head_ent) meta.push(['头部企业', s.head_ent + '（' + (s.head_ent_src || '用户输入') + '）']);
+    $('metaGrid').innerHTML = meta.map(m =>
+      '<div class="meta-item"><span class="k">' + m[0] + '：</span>' + esc(m[1]) + '</div>').join('');
+
+    li($('srcList'), s.sources && s.sources.length ? s.sources : ['（无）']);
+
+    if (s.gaps && s.gaps.length) { $('gapBlock').style.display = 'block'; li($('gapList'), s.gaps); }
+    else $('gapBlock').style.display = 'none';
+
+    if (s.unmapped && s.unmapped.length) {
+      $('unmappedBlock').style.display = 'block';
+      $('unmappedList').textContent = s.unmapped.join('、');
+    } else $('unmappedBlock').style.display = 'none';
+
+    $('logPre').textContent = s.log || '';
+    result.classList.add('show');
+  }
+
+  $('downloadBtn').addEventListener('click', () => {
+    try { downloadExcel(); }
+    catch (e) { showError('文件下载失败：' + e.message); }
+  });
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  // Enter 快速生成
+  [prodInput, entInput].forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') genBtn.click(); }));
+})();
+</script>
+</body>
+</html>

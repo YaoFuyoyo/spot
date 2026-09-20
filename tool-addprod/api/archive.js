@@ -34,22 +34,46 @@ module.exports = async function handler(req, res) {
   catch { return writeJSON(res, 400, { ok: false, error: '请求体须为合法 JSON' }); }
 
   const spec = body.spec;
-  const hasSyn = spec && Array.isArray(spec.synonyms) && spec.synonyms.length;
+  const hasSyn = spec && ((Array.isArray(spec.synonyms) && spec.synonyms.length)
+    || (Array.isArray(spec.synonymsSet) && spec.synonymsSet.length));
   const hasAdd = spec && Array.isArray(spec.add) && spec.add.length;
   if (!hasSyn && !hasAdd) return writeJSON(res, 400, { ok: false, error: '没有待写入的变更' });
 
   try {
+    // 0) dry-run 模式：仅返回写入计划（含已存在编号的现有信息），不做任何改动。
+    //    前端据此弹二次确认框（新增/同义词/编号主键更新），确认后再正式提交。
+    if (body.dryRun) {
+      const plan = KB.archive(spec, { dryRun: true });
+      return writeJSON(res, 200, {
+        ok: true,
+        dryRun: true,
+        plan: {
+          skipped: plan.skipped,
+          synonyms: plan.synonyms,
+          add: plan.add,
+          updated: plan.updated
+        }
+      });
+    }
+
     // 1) dry-run 预检：插入位置/父级存在性/编号冲突
     const plan = KB.archive(spec, { dryRun: true });
     if (plan.skipped.length) {
       return writeJSON(res, 422, { ok: false, error: '写入预检未通过，未做任何改动：' + plan.skipped.join('；') });
     }
-    if (!plan.synonyms.length && !plan.add.length) {
+    if (!plan.synonyms.length && !plan.add.length && !plan.updated.length) {
       return writeJSON(res, 422, { ok: false, error: '没有可写入的变更' });
     }
 
-    // 2) 正式写入（自动备份）
+    // 2) 正式写入（自动备份）。预检与写入间可能被另一位用户抢先写入，
+    // 因而正式写入后再次明确校验结果，不能把“未写入”误报为成功。
     const summary = KB.archive(spec, { dryRun: false });
+    if (summary.skipped.length) {
+      return writeJSON(res, 409, { ok: false, error: '知识库刚刚发生变化，请重新分析后再存档：' + summary.skipped.join('；') });
+    }
+    if (!summary.synonyms.length && !summary.add.length && !summary.updated.length) {
+      return writeJSON(res, 409, { ok: false, error: '没有实际写入任何变更，请重新分析后再存档' });
+    }
 
     return writeJSON(res, 200, {
       ok: true,
@@ -57,6 +81,7 @@ module.exports = async function handler(req, res) {
         backup: summary.backup,
         synonyms: summary.synonyms,
         add: summary.add,
+        updated: summary.updated,
         saved: summary.saved
       },
       snapshot: KB.snapshot()

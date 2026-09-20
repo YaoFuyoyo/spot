@@ -64,6 +64,31 @@
   .notes { font-size: 12px; color: #b45309; margin-bottom: 12px; line-height: 1.6; }
   .notes b { color: #92400e; }
 
+  /* 结果编辑模式（人工补充兜底） */
+  .res-actions { display: flex; gap: 8px; }
+  #resultTable input.cell-input {
+    width: 100%; min-width: 60px; border: 1px solid rgba(139,92,246,0.25); border-radius: 6px;
+    padding: 5px 8px; font-size: 13px; font-family: inherit; color: #1a1a2e; outline: none; transition: all .15s;
+  }
+  #resultTable input.cell-input:focus { border-color: #8b5cf6; box-shadow: 0 0 0 2px rgba(139,92,246,0.12); }
+  td.op-cell { text-align: center; white-space: nowrap; }
+  .btn-del {
+    padding: 4px 10px; border: 1px solid #ffccc7; border-radius: 6px; background: #fff1f0;
+    color: #cf1322; font-size: 12px; cursor: pointer; font-family: inherit; transition: all .15s;
+  }
+  .btn-del:hover { background: #ffccc7; }
+  .btn-save {
+    padding: 7px 16px; border: none; border-radius: 8px;
+    background: linear-gradient(135deg, #16a34a, #22c55e); color: #fff; font-size: 13px;
+    font-weight: 600; cursor: pointer; font-family: inherit; transition: all .2s;
+  }
+  .btn-save:hover:not(:disabled) { box-shadow: 0 4px 14px rgba(22,163,74,0.35); }
+  .btn-save:disabled { opacity: .55; cursor: not-allowed; }
+  .btn-add-row {
+    margin-top: 12px; border-style: dashed; color: #8b5cf6;
+  }
+  .edit-hint { font-size: 12px; color: #6b46c1; margin-top: 10px; line-height: 1.6; }
+
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { border: 1px solid #eee2ff; padding: 8px 10px; text-align: left; }
   th { background: #f7f2ff; color: #6b46c1; font-weight: 600; }
@@ -80,6 +105,24 @@
   #error { display: none; margin: 16px 0; background: #fff1f0; border: 1px solid #ffa39e;
     color: #cf1322; border-radius: 8px; padding: 12px 14px; font-size: 13px; line-height: 1.6; word-break: break-all; }
   #error.show { display: block; }
+
+  /* 存档二次确认弹窗 */
+  #confirmMask { display: none; position: fixed; inset: 0; background: rgba(30,20,50,0.42);
+    z-index: 30; align-items: center; justify-content: center; }
+  #confirmMask.show { display: flex; }
+  .confirm-box { background: #fff; border-radius: 12px; padding: 22px 26px; max-width: 760px; width: 92%;
+    max-height: 82vh; overflow: auto; box-shadow: 0 12px 40px rgba(80,50,150,0.28); }
+  .confirm-box h3 { font-size: 16px; margin-bottom: 4px; }
+  .confirm-box .confirm-sub { font-size: 12px; color: #999; margin-bottom: 14px; }
+  .confirm-section { margin-bottom: 14px; }
+  .confirm-section .sec-title { font-size: 13px; font-weight: 700; color: #6b46c1; margin-bottom: 8px; }
+  .confirm-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .confirm-table th, .confirm-table td { border: 1px solid #eee2ff; padding: 6px 8px; text-align: left; }
+  .confirm-table th { background: #f7f2ff; color: #6b46c1; font-weight: 600; }
+  .upd-before { color: #b36b00; }
+  .upd-after { color: #16a34a; font-weight: 600; }
+  .confirm-tip { font-size: 12px; color: #999; margin-top: 4px; line-height: 1.6; }
+  .confirm-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 
   /* 加载遮罩 */
   #loading { display: none; position: fixed; inset: 0; background: rgba(245,243,255,0.72);
@@ -136,6 +179,10 @@
   <div class="card" id="resultCard" style="display:none; margin-top:24px;">
     <div class="res-head">
       <div class="title">判定结果：<span id="resWord" style="color:#8b5cf6;"></span> <span class="badge" id="resBadge"></span></div>
+      <div class="res-actions">
+        <button class="btn-small" id="editBtn" style="display:none;" title="人工修正大模型结果后存档">编辑</button>
+        <button class="btn-save" id="saveBtn" style="display:none;">保存</button>
+      </div>
     </div>
     <div class="conclusion" id="conclusion"></div>
     <div class="notes" id="notes" style="display:none;"><b>提示：</b><span id="notesSpan"></span></div>
@@ -145,6 +192,10 @@
       </tr></thead>
       <tbody></tbody>
     </table>
+    <button class="btn-small btn-add-row" id="addRowBtn" style="display:none;">+ 新增行</button>
+    <div class="edit-hint" id="editHint" style="display:none;">
+      编辑模式：可修改任意单元格、删除行或新增行；<b>【保存】仅暂存修改（不写库）</b>，确认无误后点【存档确认】才写入知识库。存档时按编号自动分流：<b>编号已存在 → 更新确认弹窗（覆盖名称/同义词），编号不存在 → 新增确认弹窗</b>。编号建议沿用「父级编号 + 同级顺序号」规则（如 392701 下为 392701xx）。
+    </div>
     <button class="btn-archive" id="archiveBtn" style="display:none;">存档确认</button>
     <div class="archive-info" id="archiveInfo"></div>
   </div>
@@ -190,6 +241,18 @@
 
 <div id="loading"><div class="spinner"></div><div class="txt">正在分析产品词…</div></div>
 
+<div id="confirmMask">
+  <div class="confirm-box">
+    <h3>存档确认</h3>
+    <div class="confirm-sub">请核对以下将写入知识库的数据，确认后立即生效。</div>
+    <div id="confirmBody"></div>
+    <div class="confirm-btns">
+      <button class="btn-small" id="confirmCancel">取消</button>
+      <button class="btn-archive" id="confirmOk" style="margin-top:0;">确认存档</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function() {
   const $ = id => document.getElementById(id);
@@ -199,6 +262,14 @@
   const badgeMap = { exists: ['已存在', 'exists'], synonym: ['作为同义词', 'synonym'], add: ['新增', 'add'], uncertain: ['无法确定', 'uncertain'] };
 
   let lastSpec = null;
+  let lastResult = null;   // 大模型完整返回 {action, conclusion, rows, spec, ...}
+  let lastWord = '';
+  let editing = false;
+  let pendingSpec = null;  // 二次确认弹窗待提交的 spec
+
+  const editBtn = $('editBtn'), saveBtn = $('saveBtn'), addRowBtn = $('addRowBtn'), editHint = $('editHint');
+  const resTbody = $('resultTable').querySelector('tbody'), resTheadRow = $('resultTable').querySelector('thead tr');
+  const BASE_HEADS = '<th>产品编号</th><th>产品名称</th><th>产品层级</th><th>产品行业大类</th><th>产品同义词</th>';
 
   function showError(m) { errorBox.textContent = m; errorBox.classList.add('show'); }
   function clearError() { errorBox.classList.remove('show'); errorBox.textContent = ''; }
@@ -217,7 +288,7 @@
       if (!j.ok) throw new Error(j.error || '分析失败');
       renderResult(word, j);
     } catch (e) {
-      showError('生成失败：' + e.message);
+      showError('生成失败：' + e.message + '。请直接点击补充按钮再次重试，或换更具体的产品词。');
     } finally {
       loading.classList.remove('show'); analyzeBtn.disabled = false;
     }
@@ -225,6 +296,7 @@
 
   function renderResult(word, j) {
     resultCard.style.display = 'block';
+    lastWord = word; lastResult = j; editing = false;
     $('resWord').textContent = word;
     const [label, cls] = badgeMap[j.action] || [j.action, 'uncertain'];
     const badge = $('resBadge'); badge.textContent = label; badge.className = 'badge ' + cls;
@@ -233,35 +305,228 @@
     if (notes.length) { $('notes').style.display = 'block'; $('notesSpan').textContent = notes.join('；'); }
     else $('notes').style.display = 'none';
 
-    const tbody = $('resultTable').querySelector('tbody');
-    tbody.innerHTML = (j.rows || []).map(r =>
-      '<tr>' + r.map(c => '<td>' + esc(String(c == null ? '' : c)) + '</td>').join('') + '</tr>'
-    ).join('') || '<tr><td colspan="5" style="color:#aaa;text-align:center;">无可落表数据行</td></tr>';
-
-    lastSpec = j.spec;
+    renderReadTable(j.rows || []);
+    lastSpec = j.spec ? Object.assign({}, j.spec, { update: true }) : null;
+    // 所有判定类型均可人工修正；编辑保存后按编号分流（在库→更新弹窗/不在→新增弹窗）
+    editBtn.style.display = 'inline-block';
+    editBtn.textContent = '编辑';
+    saveBtn.style.display = 'none';
+    addRowBtn.style.display = 'none';
+    editHint.style.display = 'none';
     archiveBtn.style.display = (j.action === 'synonym' || j.action === 'add') && j.spec ? 'inline-block' : 'none';
   }
 
-  async function archive() {
-    if (!lastSpec) return;
+  function renderReadTable(rows) {
+    resTheadRow.innerHTML = BASE_HEADS;
+    resTbody.innerHTML = rows.map(r =>
+      '<tr>' + r.map(c => '<td>' + esc(String(c == null ? '' : c)) + '</td>').join('') + '</tr>'
+    ).join('') || '<tr><td colspan="5" style="color:#aaa;text-align:center;">无可落表数据行</td></tr>';
+  }
+
+  // ===== 编辑模式（人工补充兜底）：行内编辑 / 删除行 / 新增行 =====
+  function editRowHtml(r) {
+    const v = i => esc(String(r[i] == null ? '' : r[i]));
+    const cell = (f, val) => `<td><input class="cell-input" data-f="${f}" value="${val}"></td>`;
+    return '<tr>' + cell('code', v(0)) + cell('name', v(1)) + cell('level', v(2)) + cell('industry', v(3)) + cell('syn', v(4))
+      + '<td class="op-cell"><button type="button" class="btn-del">删除</button></td></tr>';
+  }
+
+  function renderEditTable(rows) {
+    resTheadRow.innerHTML = BASE_HEADS + '<th style="width:64px;">操作</th>';
+    const list = rows.length ? rows : [['', '', '', '', '']];
+    resTbody.innerHTML = list.map(editRowHtml).join('');
+  }
+
+  function enterEdit() {
+    // 所有判定类型均可人工修正（已存在/作为同义词/新增/无法确定），统一编辑后按编号分流
+    if (!lastResult) return;
+    editing = true;
+    editBtn.textContent = '取消编辑';
+    saveBtn.style.display = 'inline-block';
+    addRowBtn.style.display = 'inline-block';
+    editHint.style.display = 'block';
+    // uncertain 无行也可人工补录；add/synonym 用系统返回的行
+    renderEditTable(lastResult.rows || []);
+    // 编辑模式下由右上「保存」统一提交，隐藏下方「存档确认」避免双入口
+    archiveBtn.style.display = 'none';
+    archiveInfo.textContent = '';
+  }
+
+  function exitEdit() {
+    // 丢弃本次未保存的修改，恢复到上次保存（或系统原始）的状态
+    editing = false;
+    editBtn.textContent = '编辑';
+    saveBtn.style.display = 'none';
+    addRowBtn.style.display = 'none';
+    editHint.style.display = 'none';
+    renderReadTable(lastResult.rows || []);
+    archiveBtn.style.display = lastSpec ? 'inline-block' : 'none';
+  }
+
+  function addRow() {
+    // 编号预填：参考最后一个非空编号，同父级顺延 +1（可手改，后端存档前统一校验）
+    const codes = [...resTbody.querySelectorAll('input[data-f="code"]')].map(i => i.value.trim()).filter(c => /^\d{2,8}$/.test(c) && c.length % 2 === 0);
+    const levels = [...resTbody.querySelectorAll('input[data-f="level"]')].map(i => i.value.trim()).filter(v => /^[1-4]$/.test(v));
+    let code = '', level = levels.length ? levels[levels.length - 1] : '';
+    if (codes.length) {
+      const last = codes[codes.length - 1];
+      const parent = last.slice(0, -2);
+      const mx = Math.max(0, ...codes.filter(c => c.length === last.length && c.startsWith(parent)).map(c => parseInt(c.slice(-2), 10) || 0));
+      if (mx < 99) code = parent + String(mx + 1).padStart(2, '0');
+    }
+    resTbody.insertAdjacentHTML('beforeend', editRowHtml([code, '', level, '', '']));
+    const nameInput = resTbody.querySelector('tr:last-child input[data-f="name"]');
+    if (nameInput) nameInput.focus();
+  }
+
+  function collectEditRows() {
+    return [...resTbody.querySelectorAll('tr')].map(tr => {
+      if (!tr.querySelector('input[data-f="code"]')) return null;
+      const get = f => { const el = tr.querySelector(`input[data-f="${f}"]`); return el ? el.value.trim() : ''; };
+      return [get('code'), get('name'), get('level'), get('industry'), get('syn')];
+    }).filter(Boolean).filter(r => r.some(v => v));   // 丢弃全空行
+  }
+
+  function validateEditRows(rows) {
+    if (!rows.length) return '没有可存档的数据行（至少保留一行）';
+    const seen = new Set();
+    for (const [code, name, level] of rows) {
+      if (!/^\d{2,8}$/.test(code) || code.length % 2 !== 0) return `编号「${code || '(空)'}」须为 2/4/6/8 位数字`;
+      if (seen.has(code)) return `编号「${code}」在表格中重复`;
+      seen.add(code);
+      if (!name) return `编号 ${code} 缺少产品名称`;
+      const lv = parseInt(level, 10);
+      if (!lv || lv < 1 || lv > 4) return `编号 ${code} 的产品层级须为 1~4`;
+      if (code.length !== lv * 2) return `编号「${code}」长度与层级不符（${lv} 级应为 ${lv * 2} 位）`;
+    }
+    return null;
+  }
+
+  function buildEditSpec(rows) {
+    // 统一通道：人工编辑后的行不再区分「同义词/新增」——
+    // 编号在库中 → 以编号为主键更新（弹窗二次确认）；编号不在库中 → 新增（弹窗二次确认）。
+    return {
+      update: true,
+      synonyms: [],
+      add: rows.map(r => ({ code: r[0], name: r[1], level: parseInt(r[2], 10), industry: r[3], syn: r[4] }))
+    };
+  }
+
+  function saveEdit() {
+    // 「保存」= 暂存编辑结果到前端缓存（不落库）；写入知识库需再点「存档确认」
+    const rows = collectEditRows();
+    const err = validateEditRows(rows);
+    if (err) { showError('行校验未通过：' + err); return; }
+    lastResult.rows = rows.map(r => r.slice());
+    lastSpec = buildEditSpec(rows);
+    editing = false;
+    editBtn.textContent = '编辑';
+    saveBtn.style.display = 'none';
+    addRowBtn.style.display = 'none';
+    editHint.style.display = 'none';
+    renderReadTable(lastResult.rows);
+    archiveBtn.style.display = lastSpec ? 'inline-block' : 'none';
     clearError();
-    archiveBtn.disabled = true; loading.classList.add('show');
+    archiveInfo.textContent = '已保存编辑（未存档），请确认后点击「存档确认」写入知识库。';
+  }
+
+  async function archive() {
+    // 第一步：dry-run 预检 + 获取写入计划（含已存在编号的现有信息），弹二次确认框
+    const spec = lastSpec;
+    if (!spec) return;
+    clearError();
+    archiveBtn.disabled = true; saveBtn.disabled = true; loading.classList.add('show');
+    let plan;
     try {
       const resp = await fetch('/api/addprod/archive', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spec: lastSpec })
+        body: JSON.stringify({ spec, dryRun: true })
       });
-      const j = await resp.json();
-      if (!j.ok) throw new Error(j.error || '存档失败');
+      let j;
+      try { j = await resp.json(); }
+      catch { throw new Error(`预检接口返回异常（HTTP ${resp.status}）`); }
+      if (!resp.ok || !j.ok) throw new Error(j.error || `预检失败（HTTP ${resp.status}）`);
+      plan = j.plan || {};
+      if (plan.skipped && plan.skipped.length) throw new Error('写入预检未通过：' + plan.skipped.join('；'));
+      if (!(plan.add || []).length && !(plan.synonyms || []).length && !(plan.updated || []).length) {
+        throw new Error('没有可写入的变更');
+      }
+      showConfirm(spec, plan);
+    } catch (e) {
+      showError('存档预检失败：' + e.message);
+    } finally {
+      archiveBtn.disabled = false; saveBtn.disabled = false; loading.classList.remove('show');
+    }
+  }
+
+  function showConfirm(spec, plan) {
+    pendingSpec = spec;
+    const esc2 = esc;
+    let html = '';
+    const upd = plan.updated || [], adds = plan.add || [], syns = plan.synonyms || [];
+    if (upd.length) {
+      html += '<div class="confirm-section"><div class="sec-title">⚠ 更新已有产品（' + upd.length
+        + ' 条，以产品编号为主键覆盖）</div><table class="confirm-table"><tr><th>产品编号</th><th>现有名称</th><th>更新后名称</th><th>同义词变化</th></tr>'
+        + upd.map(u => '<tr><td>' + esc2(u.code) + '</td><td class="upd-before">' + esc2(u.before.name)
+          + '</td><td class="upd-after">' + esc2(u.name) + '</td><td>'
+          + esc2(u.before.syn || '（无）') + ' → ' + esc2(u.syn || '（清空）') + '</td></tr>').join('')
+        + '</table></div>';
+    }
+    if (adds.length) {
+      html += '<div class="confirm-section"><div class="sec-title">新增产品（' + adds.length + ' 条）</div>'
+        + '<table class="confirm-table"><tr><th>产品编号</th><th>产品名称</th><th>层级</th><th>行业大类</th><th>同义词</th></tr>'
+        + adds.map(a => '<tr><td>' + esc2(a.code) + '</td><td>' + esc2(a.name) + '</td><td>' + a.level
+          + '</td><td>' + esc2(a.industry) + '</td><td>' + esc2(a.syn || '') + '</td></tr>').join('')
+        + '</table></div>';
+    }
+    if (syns.length) {
+      html += '<div class="confirm-section"><div class="sec-title">同义词挂入（' + syns.length + ' 条）</div>'
+        + '<table class="confirm-table"><tr><th>产品编号</th><th>产品名称</th><th>更新后同义词</th></tr>'
+        + syns.map(s => '<tr><td>' + esc2(s.code) + '</td><td>' + esc2(s.name) + '</td><td>' + esc2(s.newSyn) + '</td></tr>').join('')
+        + '</table></div>';
+    }
+    html += '<div class="confirm-tip">写入时将自动整库备份；「更新已有产品」会以表格数据覆盖该编号的名称与同义词，请确认无误。</div>';
+    $('confirmBody').innerHTML = html;
+    $('confirmMask').classList.add('show');
+  }
+
+  function closeConfirm() {
+    $('confirmMask').classList.remove('show');
+    pendingSpec = null;
+  }
+
+  async function doArchive() {
+    // 第二步：用户确认后正式写入
+    const spec = pendingSpec;
+    if (!spec) return;
+    closeConfirm();
+    clearError();
+    archiveBtn.disabled = true; saveBtn.disabled = true; loading.classList.add('show');
+    try {
+      const resp = await fetch('/api/addprod/archive', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spec })
+      });
+      let j;
+      try { j = await resp.json(); }
+      catch { throw new Error(`存档接口返回异常（HTTP ${resp.status}）`); }
+      if (!resp.ok || !j.ok) throw new Error(j.error || `存档失败（HTTP ${resp.status}）`);
       archiveBtn.style.display = 'none';
-      const s = j.summary.synonyms.concat(j.summary.add);
+      lastSpec = null;
+      editing = false;
+      editBtn.style.display = 'none';
+      saveBtn.style.display = 'none';
+      addRowBtn.style.display = 'none';
+      editHint.style.display = 'none';
+      const summary = j.summary || { synonyms: [], add: [], updated: [] };
+      const s = (summary.synonyms || []).concat(summary.add || []).concat(summary.updated || []);
       const bits = s.map(x => x.code + ' ' + x.name).join('、');
-      archiveInfo.textContent = '已写入：' + bits + '（备份：' + (j.summary.backup || '-') + '）';
+      archiveInfo.textContent = '已写入：' + bits;  // + '（备份：' + (summary.backup || '-') + '）'
       loadKB(1); // 同步回显下方知识库表格
     } catch (e) {
       showError('存档失败：' + e.message);
     } finally {
-      loading.classList.remove('show'); archiveBtn.disabled = false;
+      loading.classList.remove('show'); archiveBtn.disabled = false; saveBtn.disabled = false;
     }
   }
 
@@ -316,9 +581,12 @@
     const btn = $('kbDownloadBtn');
     clearError(); btn.disabled = true;
     try {
-      const resp = await fetch('/api/addprod/export');
-      const j = await resp.json();
-      if (!j.ok) throw new Error(j.error || '导出失败');
+      const resp = await fetch('/api/addprod/export', { cache: 'no-store' });
+      let j;
+      try { j = await resp.json(); }
+      catch { throw new Error(`导出接口返回异常（HTTP ${resp.status}）`); }
+      if (!resp.ok || !j.ok) throw new Error(j.error || `导出失败（HTTP ${resp.status}）`);
+      if (j.warning) showError('下载提示：' + j.warning);
       const bin = atob(j.base64);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -338,6 +606,17 @@
   analyzeBtn.addEventListener('click', analyze);
   archiveBtn.addEventListener('click', archive);
   wordInput.addEventListener('keydown', e => { if (e.key === 'Enter') analyze(); });
+  editBtn.addEventListener('click', () => editing ? exitEdit() : enterEdit());
+  saveBtn.addEventListener('click', saveEdit);
+  addRowBtn.addEventListener('click', addRow);
+  // 存档二次确认弹窗
+  $('confirmOk').addEventListener('click', doArchive);
+  $('confirmCancel').addEventListener('click', closeConfirm);
+  // 行删除（事件委托：编辑模式下每行「删除」按钮）
+  resTbody.addEventListener('click', e => {
+    const btn = e.target.closest('.btn-del');
+    if (btn) btn.closest('tr').remove();
+  });
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 

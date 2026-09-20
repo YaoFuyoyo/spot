@@ -18,6 +18,9 @@ const DEFAULT_DB = (process.env.ADDPROD_DB_PATH || '').trim()
 // 迁移源 / 导出模板（保留原 Excel 路径供 seed_db.js 与 export.js 使用）
 const DEFAULT_KB = path.join(__dirname, '../../skills/product-taxonomy-supplement/references/产品分类知识库.xlsx');
 
+// 自动备份开关: ADDPROD_BACKUP=1 开启 (默认关闭, 不再生成 .bak.sqlite)
+const AUTO_BACKUP = process.env.ADDPROD_BACKUP === '1';
+
 // 维护手册「统一替换词规则」：组内词汇在全产品范围内可相互替换匹配
 const REPLACE_GROUPS = {
   设备类: ['机械', '机器', '设备', '装备', '装置', '仪器', '器材', '器具', '器械'],
@@ -67,6 +70,15 @@ const SQL_ROW = 'SELECT code, name, level, industry, synonyms FROM product';
 function openDb(p) {
   fs.mkdirSync(path.dirname(p), { recursive: true });
   const d = new DatabaseSync(p);
+  // SQLite 默认遇到短暂的读写锁会立即抛 SQLITE_BUSY。页面同时刷新、导出或
+  // 重复点击存档时，给连接一个等待窗口，避免把可恢复的竞争误报为“存档失败”。
+  d.exec('PRAGMA busy_timeout = 10000');
+  // 挂载卷/共享文件系统对 WAL 的共享内存文件支持并不一致；本应用使用
+  // 单文件回滚日志模式，避免生成 -wal/-shm 文件而导致 disk I/O error。
+  d.exec('PRAGMA journal_mode = DELETE');
+  // XFS / bind mount 子路径上 fsync 可能受限；
+  // NORMAL 模式在崩溃时可能丢失最近一次事务，但远低于 FULL 的 I/O 失败率。
+  d.exec('PRAGMA synchronous = NORMAL');
   d.exec(`
     CREATE TABLE IF NOT EXISTS product (
       code     TEXT PRIMARY KEY,
@@ -268,12 +280,13 @@ function archive(spec, opts) {
   const dryRun = !!opts.dryRun;
   const { d, own } = opDb(dbPath);
 
-  const summary = { dryRun, synonyms: [], add: [], skipped: [] };
+  const summary = { dryRun, synonyms: [], add: [], updated: [], skipped: [] };
   const stmtGet = d.prepare(SQL_ROW + ' WHERE code = ?');
   const batch = new Map();     // 本批次可见状态: code -> row（含已有行的同义词更新与全部新增）
   const newCodes = [];         // 本批次新增的编号（用于插入位置/层级行数推算）
   const synUpdates = [];       // 待应用: {code, newSyn}
   const inserts = [];          // 待应用: row
+  const updates = [];          // 待应用（编号主键更新）: {row, before}
 
   // ---------- 1) 同义词挂入 ----------
   for (const item of spec.synonyms || []) {
@@ -295,13 +308,51 @@ function archive(spec, opts) {
     summary.synonyms.push({ code, name: rowName(r), newSyn, levelRowsUpdated: l4 });
   }
 
-  // ---------- 2) 新增节点（按编码升序，保证插入位置递推正确） ----------
+  // ---------- 1b) 同义词整串替换（人工编辑兜底：前端编辑后的完整串直接生效，支持增删） ----------
+  for (const item of spec.synonymsSet || []) {
+    const code = String(item.code || '').trim();
+    const syn = String(item.syn || '').trim();
+    let r = batch.get(code);
+    if (!r) { const g = stmtGet.get(code); if (g) r = toRow(g); }
+    if (!r) { summary.skipped.push(`编号 ${code} 不存在`); continue; }
+    if (synList(r[4]).join('；') === synList(syn).join('；')) {
+      summary.skipped.push(`${code} 同义词未变化`); continue;
+    }
+    const updated = r.slice(); updated[4] = syn;
+    batch.set(code, updated);
+    synUpdates.push({ code, newSyn: syn });
+    // 受影响的【层级】行数 = 该节点子树下的 4 级产品行数
+    const l4 = d.prepare(`SELECT COUNT(*) AS c FROM product WHERE level = 4 AND code LIKE ? || '%'`).get(code).c;
+    summary.synonyms.push({ code, name: rowName(r), newSyn: syn, levelRowsUpdated: l4, mode: 'set' });
+  }
+
+  // ---------- 2) 新增节点 / 编号主键更新（按编码升序，保证插入位置递推正确） ----------
+  const allowUpdate = !!spec.update;   // 以产品编号为主键更新已有数据（人工兜底）
   const adds = (spec.add || []).slice().sort((a, b) => (intCode(a.code) || 0) - (intCode(b.code) || 0));
   for (const item of adds) {
     const code = String(item.code || '').trim();
     const lvl = parseInt(item.level, 10);
     const existRow = batch.get(code) || (stmtGet.get(code) ? toRow(stmtGet.get(code)) : null);
-    if (existRow) { summary.skipped.push(`编号 ${code} 已存在：${rowName(existRow)}`); continue; }
+    if (existRow && !allowUpdate) { summary.skipped.push(`编号 ${code} 已存在：${rowName(existRow)}`); continue; }
+    if (existRow && allowUpdate) {
+      // 更新模式：名称/同义词整串覆盖，行业大类非空才覆盖（人工通常不改）；层级由编号决定，须与传入层级一致
+      if (!Number.isFinite(lvl) || code.length !== lvl * 2) { summary.skipped.push(`${code} 长度与层级 ${item.level} 不符（应为 ${lvl * 2} 位）`); continue; }
+      const name = String(item.name || '').trim();
+      if (!name) { summary.skipped.push(`更新 ${code} 缺少产品名称`); continue; }
+      const industry = String(item.industry || '').trim();
+      const syn = String(item.syn || '').trim();
+      // 无变化跳过：名称/同义词/行业大类均与现状一致时不产生更新项（人工编辑后未改动的行）
+      if (name === rowName(existRow) && syn === rowSyn(existRow) && (!industry || industry === rowIndustry(existRow))) continue;
+      const row = existRow.slice();
+      row[1] = name;
+      if (industry) row[3] = industry;
+      row[4] = syn;   // 整串覆盖（空 = 清空，弹窗中展示前后对比）
+      batch.set(code, row);
+      const before = { name: rowName(existRow), level: rowLevel(existRow), industry: rowIndustry(existRow), syn: rowSyn(existRow) };
+      updates.push({ row, before });
+      summary.updated.push({ code, name, level: lvl, industry: row[3], syn, before });
+      continue;
+    }
     if (!Number.isFinite(lvl) || code.length !== lvl * 2) { summary.skipped.push(`${code} 长度与层级 ${item.level} 不符（应为 ${lvl * 2} 位）`); continue; }
     const parent = code.slice(0, -2);
     const parentRow = parent ? (batch.get(parent) || (stmtGet.get(parent) ? toRow(stmtGet.get(parent)) : null)) : null;
@@ -331,12 +382,14 @@ function archive(spec, opts) {
   }
 
   if (dryRun) { if (own) d.close(); return summary; }
-  if (synUpdates.length || inserts.length) {
-    // ---------- 备份（整库快照，固定文件名每次覆盖，避免目录无限增长） ----------
-    const bak = dbPath.replace(/\.sqlite$/i, '.bak.sqlite');
-    fs.rmSync(bak, { force: true }); // VACUUM INTO 要求目标文件不存在
-    d.exec(`VACUUM INTO '${bak.replace(/'/g, "''")}'`);
-    summary.backup = bak;
+  if (synUpdates.length || inserts.length || updates.length) {
+    // ---------- 备份（默认关闭: 设 ADDPROD_BACKUP=1 开启整库快照） ----------
+    if (AUTO_BACKUP) {
+      const bak = dbPath.replace(/\.sqlite$/i, '.bak.sqlite');
+      fs.rmSync(bak, { force: true }); // VACUUM INTO 要求目标文件不存在
+      d.exec(`VACUUM INTO '${bak.replace(/'/g, "''")}'`);
+      summary.backup = bak;
+    }
 
     // ---------- 事务化写入 ----------
     try {
@@ -345,6 +398,8 @@ function archive(spec, opts) {
       for (const r of inserts) ins.run(...r);
       const upd = d.prepare('UPDATE product SET synonyms = ? WHERE code = ?');
       for (const u of synUpdates) upd.run(u.newSyn, u.code);
+      const updm = d.prepare('UPDATE product SET name = ?, industry = ?, synonyms = ? WHERE code = ?');
+      for (const u of updates) updm.run(u.row[1], u.row[3], u.row[4], u.row[0]);
       d.prepare(`INSERT OR REPLACE INTO meta (key, value) VALUES ('updated_at', ?)`).run(formatTime(Date.now()));
       d.exec('COMMIT');
     } catch (err) {

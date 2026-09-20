@@ -85,7 +85,7 @@ function buildContext(word) {
     if (stemHits.length >= 40) break;
   }
 
-  // 候选归属节点（同义词命中 > 替换词命中 > 子串噪声 > 相关分支），每个附 归属链/子级/下一编码
+  // 候选归属节点（同义词命中 > 替换词命中 > 子串噪声 > 相关分支），每个附 归属链/子级/下一编码/兄弟挂靠提示
   const focus = [];
   const focusSeen = new Set();
   for (const r of [...pc.asSynonym, ...pc.replaceHits, ...pc.containedIn.slice(0, 8), ...kwHits.slice(0, 8), ...stemHits.slice(0, 12)]) {
@@ -95,10 +95,14 @@ function buildContext(word) {
     const chain = KB.pathChain(code).map(x => `${acc.rowCode(x)} ${acc.rowName(x)}`);
     const kids = KB.children(code).slice(0, 12).map(x => `${acc.rowCode(x)} ${acc.rowName(x)}`);
     const nx = KB.nextCode(code);
+    // 兄弟挂靠提示：该节点父级下的下一可用编码（4 级叶子挂同级细分时用，如 三折叠手机 挂 392701）
+    const parent = code.slice(0, -2);
+    const pnx = parent ? KB.nextCode(parent) : null;
     focus.push({
       row: `${acc.rowCode(r)} | ${acc.rowName(r)} | ${acc.rowLevel(r)}级 | ${acc.rowIndustry(r)}`,
       chain, children: kids,
-      nextCode: nx.code || ('已满: ' + nx.error)
+      nextCode: nx.code || ('已满: ' + nx.error),
+      parentNext: parent && pnx && pnx.code ? `${parent} 下一个可用编码 ${pnx.code}` : null
     });
     if (focus.length >= 16) break;
   }
@@ -125,16 +129,20 @@ function buildSystemPrompt(word, ctx) {
     '',
     '【判定流程】',
     '1) 存在性：精确同名 / 已是某节点同义词 / 统一替换词等价（系统已预检，结果见下）——任一命中即老词，系统会直接短路返回，无需你判断。',
-    '2) 上下位判断（最关键）：对候选归属节点问"该词能否唯一地挂到某个 3 级节点之下"：',
-    '   - 不能（是该节点下多个子类的统称/上位词）-> 只能作为该节点同义词（action=synonym），禁止新增；',
-    '   - 能（具体细分）-> 作为 4 级产品新增到该 3 级之下（action=add）；',
-    '   - 上级节点在库中缺失 -> 从缺失的那一级起逐级新增（action=add，多行）。',
-    '3) 输出条数规则（硬性）：新增 4 级=1 条；新增 3 级=该 3 级+其下一个 4 级（≥2 条）；新增 2 级=该 2 级+下级 3 级+再下 4 级（≥3 条）；新增 1 级=逐级向下各补一个直至 4 级（≥4 条）。',
-    '   补齐的下级产品必须是真实存在的产品词（优先复用知识库同类分支已有名称），不得凭空编造；无可靠依据时用 action=uncertain 说明。',
+    '2) 层级关系判断（最关键）：对每个候选归属节点判断该词与它的层级关系：',
+    '   - 上位统称（该节点下已有多个平级细分，该词是它们共同的统称，如「工程机械」之于桩工机械/混凝土机械…）-> 只能作为该节点同义词（action=synonym），禁止新增；',
+    '   - 下位细分（该词比节点更具体，是节点下的一个子类，如「教育玩具」之于「玩具」2405）-> 禁止作同义词，必须新增为更细节点（action=add，parent_code=该节点编号）；若该节点已是 4 级，按第 3 条兄弟挂靠；',
+    '   - 同层并列（语义父级=该节点的父级）-> 兄弟新增（action=add，parent_code=该节点的父级编号）。',
+    '3) 兄弟挂靠（语义父级在库中无独立节点时，优先于 uncertain）：找出语义最接近的既有产品（尤其是 4 级叶子，如「三折叠手机」之于「折叠屏手机」39270103），把该词作为其同级兄弟新增：parent_code 取该产品编号去掉末 2 位（即其真实父级，必须存在于候选归属节点的归属链中），系统自动分配下一编码（如 39270115）。锚点优先选与该词共享核心词的产品（如「儿童电动牙刷」应锚「电动牙刷」38182208 而非「牙刷」41010201，保证同族产品同大类）。禁止因「缺少某个中间层节点」而返回 uncertain。',
+    '4) 输出条数规则（硬性）：新增 4 级=1 条；新增 3 级=该 3 级+其下一个 4 级（≥2 条）；新增 2 级=该 2 级+下级 3 级+再下 4 级（≥3 条）；新增 1 级=逐级向下各补一个直至 4 级（≥4 条）。',
+    '   补齐的下级产品必须是真实存在的产品词（优先复用知识库同类分支已有名称），不得凭空编造；无法可靠补齐下级时，优先改选不需要新增下级的挂靠方案（如挂到既有「其他XX」3 级之下作 4 级）。',
+    '5) uncertain 是最后手段：仅当全库确实找不到任何语义相关分支时才允许，且必须在 conclusion 列出检索过哪些分支、为何都不合适。',
     '   parent_code 必须取自【候选归属节点】及其归属链中列出的真实编号，禁止编造任何编号。',
     '',
     '【维护规则】',
-    '- 唯一性：名称与同义词全库不得重复；同名不同类须加正则区分词「产品名（区分词1-区分词2）」。',
+    '- 唯一性：名称与同义词全库不得重复，系统会拦截新增重名（与既有产品名/同义词/替换词等价写法冲突均算）；同名不同类须加正则区分词「产品名（区分词1-区分词2）」。',
+    '- 颗粒度：更具体的产品词（下位词）不得并入上位产品作同义词，应新增为更细节点；语义父级缺失时兄弟挂靠，尽量不返回 uncertain。',
+    '- 同义词增益：产品名用于企业经营范围/专利标题等文本正则匹配。该词包含目标主名时（如「教育玩具」⊃「玩具」），凡能匹配该词的文本必已匹配主名，作同义词零增益，系统会拒绝；必须改为下位细分新增。',
     '- 层级正确性：先定行业大类再逐级向下，不得跨层级归类；行业大类沿用 1 级祖先。',
     '- 完整性：平铺至 4 级，不新增层级。',
     '- 统一替换词（等价写法无需录入同义词）：\n' + rgText,
@@ -150,8 +158,8 @@ function buildSystemPrompt(word, ctx) {
     '- 替换词命中：' + (shortlist(ctx.pc.replaceHits, acc).join(' ; ') || '无'),
     '- 被更长产品名包含（噪声候选）：' + (shortlist(ctx.pc.containedIn, acc, 15).join(' ; ') || '无'),
     '',
-    '【候选归属节点】（row | 归属链 | 直接子级 | 下一可用编码）',
-    ctx.focus.map(f => `- ${f.row}\n  链: ${f.chain.join(' > ') || '-'}\n  子级: ${f.children.join('、') || '-'}\n  下一编码: ${f.nextCode}`).join('\n') || '无（词本身无子串命中，请从下方二级节点清单中语义选定根父级）',
+    '【候选归属节点】（row | 归属链 | 直接子级 | 下一编码 | 兄弟挂靠提示）',
+    ctx.focus.map(f => `- ${f.row}\n  链: ${f.chain.join(' > ') || '-'}\n  子级: ${f.children.join('、') || '-'}\n  下一编码: ${f.nextCode}${f.parentNext ? `\n  兄弟挂靠: ${f.parentNext}` : ''}`).join('\n') || '无（词本身无子串命中，请从下方二级节点清单中语义选定根父级）',
     '',
     '【二级节点清单】（编号 名称；归属分支缺失时从这里选根父级，禁止使用清单以外的编号）',
     l2List.join('；'),
@@ -183,13 +191,15 @@ async function callLLM(word, ctx, feedback) {
     model: MODEL,
     temperature: 0.2,
     response_format: { type: 'json_object' },
+    // MiniMax-M3 默认开启 thinking，会把 <think> 写进 content，又慢又无法 JSON.parse
+    thinking: { type: 'disabled' },
     messages
   };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   let resp;
   try {
-    resp = await fetch(BASE + '/chat/completions', {
+    resp = await fetch(BASE + '/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + requireKey() },
       body: JSON.stringify(payload),
@@ -205,12 +215,97 @@ async function callLLM(word, ctx, feedback) {
     throw new Error('大模型接口返回 ' + resp.status + '：' + txt.slice(0, 300));
   }
   const j = await resp.json();
-  const content = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+  const msg = j && j.choices && j.choices[0] && j.choices[0].message;
+  const content = msg && (msg.content || msg.reasoning_content);
   if (!content) throw new Error('大模型未返回内容');
-  try { return JSON.parse(content); } catch (e) {
-    try { return JSON.parse(content.replace(/```json|```/g, '')); }
-    catch (e2) { throw new Error('大模型返回无法解析为 JSON，请重试'); }
+  const parsed = parseLLMJson(content);
+  if (!parsed.ok) {
+    const preview = (parsed.raw || '').replace(/\s+/g, ' ').slice(0, 200);
+    const reason = parsed.reason || 'unknown';
+    throw new Error(`大模型返回无法解析为 JSON（${reason}），请重试：${preview}`);
   }
+  return parsed.value;
+}
+
+/**
+ * 兼容地抽取大模型返回的 JSON 对象。
+ * 处理场景：纯 JSON、```json``` 围栏、首尾说明文字、引号转义/全角字符等。
+ * 解析失败时返回 { ok:false, reason, raw }，便于上层给出可定位的提示。
+ */
+function parseLLMJson(text) {
+  if (text == null) return { ok: false, reason: 'empty', raw: '' };
+  let raw = String(text).replace(/\r\n/g, '\n');
+
+  // 0) MiniMax 等推理模型把思维链包在 <think> 里；必须先剥掉，否则首个 `{` 会落在思维链中
+  raw = raw.replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, '');
+  raw = raw.replace(/<think\b[^>]*>[\s\S]*$/gi, '');
+
+  // 1) 去除常见 markdown 围栏与前缀说明
+  raw = raw.replace(/```(?:json|JSON)?/g, '').replace(/```/g, '').trim();
+
+  // 2) 直接尝试
+  let direct = tryJson(raw);
+  if (direct.ok) return direct;
+
+  // 3) 截取首个顶层 {...} 或 [...]
+  const sliced = sliceTopLevel(raw);
+  if (sliced) {
+    const r2 = tryJson(sliced);
+    if (r2.ok) return r2;
+
+    // 3.1) 修复常见的全角字符 / 中文引号
+    const fixedQuotes = sliced
+      .replace(/[“”]/g, '"')
+      .replace(/[‘’]/g, "'");
+    const r3 = tryJson(fixedQuotes);
+    if (r3.ok) return r3;
+
+    // 3.2) 去除行内尾随逗号 JSON5 风格
+    const stripped = fixedQuotes
+      .replace(/,\s*([}\]])/g, '$1');
+    const r4 = tryJson(stripped);
+    if (r4.ok) return r4;
+  }
+
+  return { ok: false, reason: direct.reason || 'parse-failed', raw };
+}
+
+function tryJson(s) {
+  try {
+    return { ok: true, value: JSON.parse(s) };
+  } catch (e) {
+    return { ok: false, reason: (e && e.message) || 'parse-failed' };
+  }
+}
+
+/** 从字符串里提取第一个完整的顶层 JSON 对象或数组（容忍前后说明文字） */
+function sliceTopLevel(s) {
+  const firstBrace = s.indexOf('{');
+  const firstBracket = s.indexOf('[');
+  let start = -1, open = '', close = '';
+  if (firstBrace === -1 && firstBracket === -1) return null;
+  if (firstBrace === -1) { start = firstBracket; open = '['; close = ']'; }
+  else if (firstBracket === -1) { start = firstBrace; open = '{'; close = '}'; }
+  else if (firstBracket < firstBrace) { start = firstBracket; open = '['; close = ']'; }
+  else { start = firstBrace; open = '{'; close = '}'; }
+
+  let depth = 0, inStr = false, escape = false;
+  for (let i = start; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (escape) { escape = false; continue; }
+      if (c === '\\') { escape = true; continue; }
+      if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; continue; }
+    if (c === open) depth++;
+    else if (c === close) {
+      depth--;
+      if (depth === 0) return s.slice(start, i + 1);
+    }
+  }
+  return null;
 }
 
 // ===================== 本地确定性校验 + 编号分配 + spec 组装 =====================
@@ -224,6 +319,15 @@ function assembleSynonym(word, targetCode) {
     return { error: `该词已是 ${targetCode} 的产品名称，无需补充` };
   }
   if (syns.includes(word)) return { error: `该词已是 ${targetCode} 的同义词，无需补充` };
+  // 零增益同义词禁令：该词包含主名时（如「教育玩具」⊃「玩具」），凡能匹配该词的文本必已匹配主名，
+  // 作同义词对正则匹配零增益，且会把更细颗粒产品吞进粗颗粒 → 强制改走下位细分新增。
+  if (word.includes(acc.rowName(target))) {
+    return {
+      error: `「${word}」包含主名「${acc.rowName(target)}」，作为其同义词对正则匹配零增益，禁止录入。`
+        + `该词应为下位细分产品：请改用 action=add（parent_code 取 ${targetCode} 或其更细分支编号）作为更细的新节点`
+        + `（若 ${targetCode} 已是 4 级，则 parent_code 取其前 6 位父级作兄弟挂靠）。`
+    };
+  }
   syns.push(word);
   const newSyn = syns.join('；');
   return {
@@ -246,6 +350,19 @@ function assembleAdd(word, llmRows) {
   for (const r of llmRows) {
     const name = String(r.name || '').trim();
     if (!name) return { error: '新增行缺少产品名称' };
+    // 唯一性：新增名称不得与库内既有产品名称/同义词/替换词等价写法重复（批次内亦然）
+    const pcName = KB.precheck(name);
+    const dupRows = [...pcName.exact, ...pcName.asSynonym, ...pcName.replaceHits];
+    if (dupRows.length) {
+      return {
+        error: `名称「${name}」与库内既有产品冲突（${dupRows.slice(0, 3).map(x => `${acc.rowCode(x)} ${acc.rowName(x)}`).join('、')}），违反唯一性原则，不得新增重名节点。`
+          + `若它是该产品的下位细分且父级链已到 4 级，请按兄弟挂靠新增：parent_code 取该 4 级产品编号去掉末 2 位，作同级兄弟；`
+          + `否则改用更精准名称或加正则区分词「名称（区分词）」。`
+      };
+    }
+    if (specRows.some(s => s.name === name)) {
+      return { error: `本批次内「${name}」重复出现，请合并或改名` };
+    }
     const parentRef = String(r.parent_code || '').trim().toUpperCase();
     let parentCode, parentLevel, industry;
     if (parentRef === 'NEW') {
