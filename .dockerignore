@@ -1,0 +1,31 @@
+# 忽略不需要打进镜像的文件
+node_modules
+npm-debug.log
+.git
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.yml
+README.md
+*.md
+*.log
+*.bak.sqlite
+*.bak.*
+
+# 本地开发产物
+.env
+.env.local
+.DS_Store
+Thumbs.db
+.idea
+.vscode
+
+# 测试/临时
+test
+tests
+coverage
+dist
+build
+
+# 大文件 (vendor 里有 .min.js 已通过 common/vendor 显式拷贝)
+*.map

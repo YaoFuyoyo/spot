@@ -1,0 +1,8 @@
+(node:2070) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+========================================
+ 站点服务已启动 (Node v22.23.2)
+   本机:    http://127.0.0.1:9999
+   局域网: http://172.24.249.165:9999
+   目录:   /mnt/d/git_project/spot
+========================================

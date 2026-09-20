@@ -12,6 +12,11 @@
     background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 50%, #faf5ff 100%);
     background-attachment: fixed;
   }
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
 
   /* ===== 顶部导航栏 ===== */
   #header {
@@ -42,6 +47,7 @@
     max-width: 1100px;
     margin: 0 auto;
     padding: 64px 32px;
+    flex: 1;
   }
   .page-title {
     font-size: 28px;
@@ -58,7 +64,7 @@
   /* ===== 工具卡片网格 ===== */
   #toolGrid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 20px;
   }
   .tool-card {
@@ -123,6 +129,25 @@
     color: #8b5cf6;
     transform: translateX(3px);
   }
+
+  /* ===== 页脚版本记录 ===== */
+  #footer {
+    border-top: 1px solid rgba(139,92,246,0.15);
+    background: rgba(255,255,255,0.6);
+    text-align: center;
+    padding: 14px 32px 22px;
+    font-size: 12px;
+    color: #999;
+  }
+  #footer .ver-tag {
+    display: inline-block;
+    padding: 1px 8px;
+    margin-right: 6px;
+    border: 1px solid rgba(139,92,246,0.35);
+    border-radius: 999px;
+    color: #8b5cf6;
+    font-weight: 600;
+  }
 </style>
 </head>
 <body>
@@ -159,7 +184,17 @@
       <div class="tc-desc">输入产品词，自动判定作为同义词或新增产品，返回编号、名称、层级、行业大类、同义词数据行，并可一键存档至产品分类知识库。</div>
       <span class="tc-arrow">→</span>
     </a>
+    <a class="tool-card" href="tool-updown/updown.html">
+      <div class="tc-icon">🔗</div>
+      <div class="tc-title">产品上下游关系网</div>
+      <div class="tc-desc">输入产品编号，基于产品分类知识库确定产品子树，结合大模型工艺常识与产业链图谱自动建边，生成 12 列上下游关系 Excel。</div>
+      <span class="tc-arrow">→</span>
+    </a>
   </div>
 </main>
+
+<footer id="footer">
+  <span class="ver-item"><span class="ver-tag">v1.3</span>20260917</span>
+</footer>
 </body>
 </html>

@@ -3,6 +3,7 @@
   "version": 2,
   "builds": [
     { "src": "tool-addchain/api/addchain.js", "use": "@vercel/node" },
+    { "src": "tool-updown/api/updown.js", "use": "@vercel/node" },
     { "src": "tool-addprod/api/*.js", "use": "@vercel/node" },
     { "src": "skills/industry-chain-graph/references/*.xlsx", "use": "@vercel/static" },
     { "src": "skills/product-taxonomy-supplement/references/*.xlsx", "use": "@vercel/static" },
@@ -14,6 +15,7 @@
   ],
   "routes": [
     { "src": "/api/addchain", "dest": "/tool-addchain/api/addchain.js" },
+    { "src": "/api/updown", "dest": "/tool-updown/api/updown.js" },
     { "src": "/api/addprod", "dest": "/tool-addprod/api/addprod.js" },
     { "src": "/api/addprod/archive", "dest": "/tool-addprod/api/archive.js" },
     { "src": "/api/addprod/kb", "dest": "/tool-addprod/api/kb.js" },

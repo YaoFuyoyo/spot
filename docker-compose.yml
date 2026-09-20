@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: spot-web:latest
+    container_name: spot-web
+    restart: unless-stopped
+    # CentOS 7 (kernel 3.10) 上 Docker 默认 seccomp 会把 node:sqlite 写盘变成
+    # SQLITE_IOERR_WRITE (778)。unconfined 后文件库可写；新内核可再收紧。
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - "${PORT:-9999}:9999"
+    # 直接 bind 宿主机业务目录，避开 /ftp/docker/volumes 子路径对 SQLite 的限制。
+    # 部署默认入口仍是 docker_deploy.sh；此处仅作为 Compose 启动时的参考。
+    volumes:
+      - /ftp/spot/data:/app/data
+    environment:
+      NODE_ENV: production
+      PORT: 9999
+      HOST: 0.0.0.0
+      ADDPROD_BACKUP: "0"
+      LLM_BASE: "${LLM_BASE:-http://10.2.13.11:3000}"
+      LLM_MODEL: "${LLM_MODEL:-gpt-5.6-luna}"
+      LLM_API_KEY: "${LLM_API_KEY:-}"
+      LLM_TIMEOUT_MS: "180000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- 'http://127.0.0.1:9999/api/addprod/kb?page=1&size=1' | grep -q '\"ok\":true' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.2"
+          memory: 128M
+
